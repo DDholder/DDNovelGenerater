@@ -1,0 +1,101 @@
+char_shenmo:
+  updated_at_ch: 24
+  location: loc_zhonglou_matou
+  physical_mental: "右小臂在撤离货栈时被流弹擦伤已包扎，连续两昼夜未眠但思维极度清醒冷酷"
+  current_goals:
+    - "核实昨夜在三号码头钟楼台阶留下敲击码的神秘来客身份"
+    - "设法借圣玛丽诊所暗房缓冲液显影银壳怀表内的微缩胶卷"
+  epistemic_bounds:
+    knows:
+      - "第18章三号码头转运路线仅海关缉私处正副处长与查验科经手"
+      - "周伯遗留的银壳怀表发条盒内藏有一卷未显影微缩胶卷"
+    unaware_of:
+      - "顾晚晴便是上级派来接替周伯的特派联络员夜莺"
+      - "罗震故意批假让他去诊所实为暗中派人尾随观察接触对象"
+    misbelieves:
+      - "以为9号扣押舱单只是寻常走私商船报关单据（尚未识破系黑潮钓鱼诱饵）"
+  profile_ext:
+    disguises:
+      - identity: "雾港海关缉私处查验科科长沈默（精明世故的技术官僚）"
+        known_by:
+          - char_zhoubo
+      - identity: "地下交通网独立潜伏暗桩“寒蝉”"
+        known_by:
+          - char_zhoubo
+    clues_held:
+      - id: "clue_cigar_dent"
+        content: "三号码头货栈二楼暗哨窗台遗留的特制楠木烟嘴半月形咬痕"
+        found_at_ch: 18
+        points_to:
+          - char_luozhen
+      - id: "clue_watch_film"
+        content: "停摆在十点十七分的亨得利银壳怀表发条盒三毫米微缩胶卷"
+        found_at_ch: 21
+        points_to:
+          - fac_heichao_zhan
+          - char_luozhen
+    suspicions:
+      - "高度怀疑恩师罗震与第18章雨夜泄密案存在直接关联"
+      - "推测黑潮在海关内部的内鬼级别足以单人接触三楼密匙副件"
+
+char_guwanqing:
+  updated_at_ch: 24
+  location: loc_zhonglou_matou
+  physical_mental: "神色冷静克制，雨夜亲自赴钟楼台阶投石问路后安全退回公董局地界"
+  current_goals:
+    - "在不暴露夜莺代号的前提下甄别海关查验科长沈默是否为寒蝉还是内鬼灰狼"
+    - "协助安全冲印老交通员周伯生前转移出的微缩胶卷"
+  epistemic_bounds:
+    knows:
+      - "雾港海关内部同时存在己方暗桩寒蝉与敌方内鬼灰狼"
+      - "周伯生前最后接触过海关查验科的待领失物流程"
+    unaware_of:
+      - "沈默已经拿到了银壳怀表微缩胶卷原件"
+    misbelieves:
+      - "尚不能排除沈默本人已被黑潮策反的可能性"
+  profile_ext:
+    disguises:
+      - identity: "公董局圣玛丽诊所外科主治医师顾晚晴"
+        known_by: []
+      - identity: "地下交通网特派重组联络员“夜莺”"
+        known_by: []
+    clues_held:
+      - id: "clue_ticket_cipher"
+        content: "上级交付的十一月旧船票尾号双盲核验母表"
+        found_at_ch: 20
+        points_to:
+          - char_shenmo
+    suspicions:
+      - "怀疑沈默在周伯遇害夜曾秘密现身三号码头潮汐暗渠附近"
+
+char_luozhen:
+  updated_at_ch: 24
+  location: loc_zhonglou_matou
+  physical_mental: "表面谈笑自若主持内部泄密清查，暗中因周伯随身怀表失踪而焦躁不安"
+  current_goals:
+    - "借9号诱饵舱单与内部甄别找出潜伏在缉私处的寒蝉"
+    - "追回周伯死前转移走的银壳怀表微缩胶卷"
+  epistemic_bounds:
+    knows:
+      - "9号舱单是黑潮机关长精心伪造的诱捕陷阱"
+      - "周伯尸体上并未搜出本应随身携带的亨得利银壳怀表"
+    unaware_of:
+      - "自己在货栈二楼窗台留下的楠木烟嘴压痕已被沈默拓印比对"
+    misbelieves:
+      - "以为得意门生沈默仍对自己感恩戴德、毫无戒心"
+  profile_ext:
+    disguises:
+      - identity: "铁腕清廉的海关缉私处实权副处长"
+        known_by:
+          - fac_heichao_zhan
+      - identity: "黑潮特务机关潜伏内线“灰狼”"
+        known_by:
+          - fac_heichao_zhan
+    clues_held:
+      - id: "clue_lost_property_log"
+        content: "查验科上周失物招领柜曾有一笔未署名旧钟表退领记录"
+        found_at_ch: 23
+        points_to:
+          - char_shenmo
+    suspicions:
+      - "开始怀疑查验科内部有人在周伯死后动过待领失物柜"

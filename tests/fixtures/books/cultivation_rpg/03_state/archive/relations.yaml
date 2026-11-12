@@ -1,0 +1,11 @@
+relations:
+  - source: char_zhaoqian
+    target: char_linfan
+    relation: "嫉恨其剑道天资并欲杀人夺宝的世家死敌"
+    valid_from_ch: 38
+    invalid_at_ch: 87
+  - source: char_linfan
+    target: char_zhaoqian
+    relation: "表面隐忍退让实则暗中筹谋反制的生死大敌"
+    valid_from_ch: 38
+    invalid_at_ch: 87

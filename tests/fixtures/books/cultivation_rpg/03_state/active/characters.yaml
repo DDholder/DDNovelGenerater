@@ -1,0 +1,43 @@
+char_linfan:
+  updated_at_ch: 141
+  location: loc_beijing_gucheng
+  physical_mental: "左肩剑伤未愈，因刚得知师门变故而表面冷静实则高度戒备"
+  current_goals:
+    - "混入北境拍卖会查清古镜来历"
+  epistemic_bounds:
+    knows:
+      - "赵乾死前曾提及血魂印"
+    unaware_of:
+      - "同行旅伴苏瑶实为北境妖庭圣女（严禁在林凡视角描写中看破）"
+    misbelieves:
+      - "以为师尊玄尘仍在闭死关"
+  profile_ext:
+    realm: "筑基后期"
+    key_items: ["残缺青铜古镜", "三枚破障丹"]
+    trump_cards: ["惊雷剑诀（每日限用一剑）"]
+
+char_suyao:
+  updated_at_ch: 141
+  location: loc_beijing_gucheng
+  physical_mental: "气息平稳内敛，借医女身份同行照料林凡剑伤，暗中密切留意拍卖场压轴器物动向"
+  current_goals:
+    - "确认林凡身上是否藏有镇族青铜古镜半身"
+    - "在暗星拍卖会竞得流落的古镜残角"
+  epistemic_bounds:
+    knows:
+      - "北境孤城暗星拍卖场今夜有北冥古宝残片登台"
+      - "林凡身受南域正道剑器所伤且正遭追索"
+    unaware_of:
+      - "林凡体内融合过半滴玄冥真水、已初步唤醒青铜古镜"
+    misbelieves:
+      - "以为林凡只是偶然捡到古物的南域普通弃徒"
+  profile_ext:
+    realm: "筑基圆满"
+    techniques:
+      - "幻月敛息术"
+      - "青丘惑神引"
+    key_items:
+      - "青竹百草篓"
+      - "妖庭圣女白玉令"
+    trump_cards:
+      - "九尾天狐本命精血护符"

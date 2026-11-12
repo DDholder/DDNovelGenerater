@@ -1,0 +1,49 @@
+char_chenyu:
+  updated_at_ch: 12
+  location: loc_binhai_kejichang
+  physical_mental: "连续通宵三十六小时重构稀疏矩阵收敛模块，眼底泛青但因v0.9回归测试全绿而精神亢奋"
+  current_goals:
+    - "守护星河v0.9底层源码不被远创资本借尽调名义套取"
+    - "率队拿下东海重工封闭盲测第一名以打通正向现金流"
+  epistemic_bounds:
+    knows:
+      - "星河v0.9在复杂叶片热力耦合算例上已实现百分之四十提速"
+      - "公司账面现金加上个人经营贷垫款最多支撑四个月"
+    unaware_of:
+      - "韩诚退股前曾私下与远创资本签署过随售优先谅解函"
+      - "园区夜班外包空调维保人员中混有竞品商业调查眼线"
+    misbelieves:
+      - "以为远创资本发来严苛补充条款只是常规投后风控施压"
+  profile_ext:
+    occupation: "首席架构师兼创始人"
+    company: "晨星智造科技"
+    net_worth: "账面股权估值1800万元（房产已抵押，个人流动现金仅剩6.4万元）"
+    equity_ratio: 0.52
+    tech_stack:
+      - "C++20"
+      - "CUDA稀疏矩阵并行求解"
+      - "非结构化有限元网格"
+
+char_tangzhi:
+  updated_at_ch: 12
+  location: loc_binhai_kejichang
+  physical_mental: "一夜未眠逐字拆解完远创资本补充备忘录，斗志昂扬且判断极其冷静"
+  current_goals:
+    - "拦截远创资本尽调清单中的源码访问越界条款"
+    - "推动东海重工招标办尽快锁定封闭盲测排期"
+  epistemic_bounds:
+    knows:
+      - "远创资本二期基金在同赛道重仓了晨星智造的直接竞品"
+      - "根据公司章程核心知识产权排他授权必须经陈屿本人同意"
+    unaware_of:
+      - "陈屿已瞒着所有人将个人唯一住房做了经营贷抵押垫资"
+    misbelieves:
+      - "以为韩诚离场时的股权交割文件已彻底出清全部历史包袱"
+  profile_ext:
+    occupation: "商业化合伙人兼法务负责人"
+    company: "晨星智造科技"
+    net_worth: "个人存款85万元，持有未成熟期权池份额"
+    equity_ratio: 0.12
+    client_pipeline:
+      - "东海重工叶片仿真项目"
+      - "启明精密结构件验算POC"

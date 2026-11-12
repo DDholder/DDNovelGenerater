@@ -1,0 +1,33 @@
+schema_version: 1
+title: "逆流晨星"
+author: "林深见鹿"
+genre_profile: "general"
+current_chapter: 12
+chapter_id_width: 4
+budget:
+  total: 10000
+  slots:
+    guardrails: 1200
+    world_and_facts: 2200
+    entities: 2500
+    continuity: 2000
+    beats: 1800
+  tail_excerpt_min_chars: 800
+  tail_excerpt_max_chars: 1200
+  recent_summary_count: 3
+  trim_order:
+    - "world_and_facts"
+    - "entities"
+    - "continuity"
+lifecycle:
+  ttl_keep_chapters: 5
+  cold_after_chapters: 40
+  stale_thread_chapters: 20
+  compact_min_milestones: 15
+  compact_max_milestones: 20
+embedding:
+  enabled: false
+  rrf_k: 60
+hosts:
+  - "opencode"
+  - "claude"

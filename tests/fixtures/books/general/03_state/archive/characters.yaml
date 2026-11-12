@@ -1,0 +1,18 @@
+char_hancheng:
+  updated_at_ch: 7
+  location: null
+  physical_mental: "拿走首笔退股分期款后已转投一家海外工业软件代理集成商担任副总"
+  current_goals: []
+  epistemic_bounds:
+    knows:
+      - "星河v0.6旧版在病态网格算例上曾存在收敛瓶颈"
+      - "自己私下与远创资本签署过随售优先谅解函"
+    unaware_of:
+      - "陈屿已在第12章彻底攻克非结构化自适应并行收敛算法"
+    misbelieves:
+      - "断定晨星智造撑不过年底便会资金链断裂清盘"
+  profile_ext:
+    occupation: "海外工业软件代理商副总裁（前晨星智造联合创始人）"
+    company: "博瑞集成科技"
+    net_worth: "退股首期款120万元及代理商年薪"
+    equity_ratio: 0.0

@@ -1,0 +1,11 @@
+relations:
+  - source: char_hancheng
+    target: fac_chenxing_tech
+    relation: "分管早期市场拓展的联合创始人与工商登记董事"
+    valid_from_ch: 1
+    invalid_at_ch: 7
+  - source: char_tangzhi
+    target: fac_yuanchuang_cap
+    relation: "曾在并购项目中交手并识破其激进条款手法的外部律所顾问"
+    valid_from_ch: 1
+    invalid_at_ch: 8

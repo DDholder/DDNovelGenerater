@@ -1,0 +1,38 @@
+fac_haiguan_jisi:
+  updated_at_ch: 24
+  status: active
+  leader: char_luozhen
+  territory:
+    - loc_zhonglou_matou
+  current_goals:
+    - "彻查三号码头走私火并案以平息洋税务司震怒"
+    - "严密监控三楼档案室扣押舱单调阅记录"
+  profile_ext:
+    disguises: []
+    clues_held: []
+    suspicions:
+      - "处内高层普遍怀疑查验科与水上巡逻队之间存在走私内应"
+
+fac_heichao_zhan:
+  updated_at_ch: 24
+  status: active
+  leader: null
+  territory: []
+  current_goals:
+    - "在月底英国邮轮抵港前肃清雾港地下交通网残余暗桩"
+    - "确保潜鲸计划爆破器材顺利混入内河转运驳船"
+  profile_ext:
+    disguises:
+      - identity: "东亚黑潮海运商社雾港分社"
+        known_by:
+          - char_shenmo
+          - char_guwanqing
+          - char_luozhen
+    clues_held:
+      - id: "clue_radio_silence"
+        content: "三号码头行动后城内地下电台连续六日保持无线电静默"
+        found_at_ch: 22
+        points_to:
+          - fac_haiguan_jisi
+    suspicions:
+      - "断定地下党尚有一名深潜于海关核心部门的暗桩未曾暴露"

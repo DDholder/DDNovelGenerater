@@ -1,0 +1,13 @@
+threads:
+  - id: thread_dead_drop_leak
+    title: "横街钟表铺一号白鸥死信箱失守之谜"
+    category: "incident"
+    status: resolved
+    planted_at: 3
+    last_progressed_at: 18
+    expected_window: [15, 20]
+    trigger_entities:
+      - char_zhoubo
+      - loc_zhonglou_matou
+    public_clue: "钟表铺门廊窗台的安全花盆连续两日未按规程转向。"
+    truth_secret: "周伯察觉黑潮暗哨盯梢后主动撤除安全标示，将怀表密本转移至海关失物柜并引开追兵。"

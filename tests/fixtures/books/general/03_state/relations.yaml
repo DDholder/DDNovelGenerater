@@ -1,0 +1,21 @@
+relations:
+  - source: char_chenyu
+    target: char_hancheng
+    relation: "共同白手起家的研究生同门与联合创始人"
+    valid_from_ch: 1
+    invalid_at_ch: 7
+  - source: char_chenyu
+    target: char_hancheng
+    relation: "因自研与套壳路线决裂并完成退股切割的前合伙人"
+    valid_from_ch: 8
+    invalid_at_ch: null
+  - source: char_chenyu
+    target: char_tangzhi
+    relation: "高度互信、技术与商业背靠背互补的核心创业搭档"
+    valid_from_ch: 8
+    invalid_at_ch: null
+  - source: fac_yuanchuang_cap
+    target: fac_chenxing_tech
+    relation: "持有天使轮少数股权但正施压推动折价并购的强势机构股东"
+    valid_from_ch: 1
+    invalid_at_ch: null

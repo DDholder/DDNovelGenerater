@@ -1,0 +1,26 @@
+char_zhoubo:
+  updated_at_ch: 18
+  location: loc_zhonglou_matou
+  physical_mental: "已于第18章三号码头雨夜突围战中拉响手雷与黑潮追兵同归于尽"
+  current_goals: []
+  epistemic_bounds:
+    knows:
+      - "沈默是自己单线领导的海关潜伏暗桩寒蝉"
+      - "银壳怀表已提前寄存在海关查验科失物招领柜"
+    unaware_of:
+      - "泄露转运路线的内鬼正是海关副处长罗震"
+    misbelieves:
+      - "以为黑潮特务只是偶然巡江撞破了三号码头货栈"
+  profile_ext:
+    disguises:
+      - identity: "三号码头横街亨得利旧表铺老钟表匠"
+        known_by:
+          - char_shenmo
+    clues_held:
+      - id: "clue_qianjing_half_map"
+        content: "缝入银壳怀表发条盒的潜鲸计划前半截水文参数胶卷"
+        found_at_ch: 16
+        points_to:
+          - fac_heichao_zhan
+    suspicions:
+      - "临终前意识到海关内部必有高层内线提前出卖了装船时刻"

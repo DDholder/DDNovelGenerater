@@ -1,0 +1,27 @@
+fac_chenxing_tech:
+  updated_at_ch: 12
+  status: active
+  leader: char_chenyu
+  territory:
+    - loc_binhai_kejichang
+  current_goals:
+    - "通过东海重工七十二小时封闭算例盲测"
+    - "稳住十四人核心研发团队直至首笔标杆合同回款"
+  profile_ext:
+    financing_stage: "Pre-A轮过渡期"
+    runway_months: 4
+    headcount: 14
+    flagship_product: "星河多物理场求解器 v0.9"
+
+fac_yuanchuang_cap:
+  updated_at_ch: 12
+  status: active
+  leader: null
+  territory: []
+  current_goals:
+    - "借补充对赌备忘录与技术尽调迫使晨星智造接受折价并购"
+  profile_ext:
+    aum: "42亿元人民币"
+    fund_vintage: 2022
+    board_seat: true
+    investment_style: "强势条款驱动与赛道整合"

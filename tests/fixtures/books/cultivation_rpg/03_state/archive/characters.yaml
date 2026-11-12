@@ -1,0 +1,19 @@
+char_zhaoqian:
+  updated_at_ch: 87
+  location: loc_zhuixinggu
+  physical_mental: "已于坠星谷乱磁罡风阵中被林凡惊雷一剑洞穿气海身亡"
+  current_goals: []
+  epistemic_bounds:
+    knows:
+      - "坠星谷陨坑出土过一面古怪青铜古镜"
+    unaware_of:
+      - "林凡早已摸清坠星谷秋分乱磁罡风的发作时辰"
+    misbelieves:
+      - "以为林凡不过是尚未稳固筑基中期的寒门剑修"
+  profile_ext:
+    realm: "筑基后期"
+    techniques:
+      - "赤血焚心剑诀"
+    key_items: []
+    trump_cards:
+      - "血魂母引玉符（临死已捏碎耗尽）"

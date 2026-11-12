@@ -1,0 +1,39 @@
+threads:
+  - id: thread_solver_benchmark
+    title: "东海重工七十二小时封闭算例盲测决战"
+    category: "business_milestone"
+    status: active
+    planted_at: 2
+    last_progressed_at: 12
+    expected_window: [15, 25]
+    trigger_entities:
+      - char_chenyu
+      - fac_chenxing_tech
+      - item_xinghe_prototype
+    public_clue: "星河v0.9已在内部实验室跑通七十二万网格叶片算例，即将赴东海重工现场盲测。"
+    truth_secret: "竞品代理商将在盲测第48小时临时提议追加极端病态网格算例，恰好撞在陈屿刚重构完成的强项上。"
+  - id: thread_audit_clause
+    title: "远创资本技术尽调背后的源码套取与并购图谋"
+    category: "corporate_intrigue"
+    status: planted
+    planted_at: 11
+    last_progressed_at: 12
+    expected_window: [13, 22]
+    trigger_entities:
+      - char_tangzhi
+      - fac_yuanchuang_cap
+      - item_duidu_hetong
+    public_clue: "远创资本突袭发来要求六十日回款对赌及开放底层仓库尽调的补充备忘录。"
+    truth_secret: "远创资本二期基金已重仓竞品，试图借尽调摸清星河v0.9底牌以促成低价合并。"
+  - id: thread_leaked_benchmark
+    title: "韩诚退股前私签随售函与旧测试报告外流隐患"
+    category: "legal_timebomb"
+    status: dormant
+    planted_at: 7
+    last_progressed_at: 7
+    expected_window: [20, 29]
+    trigger_entities:
+      - char_hancheng
+      - rule_equity_vesting
+    public_clue: "韩诚第7章退股交割异常爽快，且交接电脑中少了一份半年前的v0.6基准测试集。"
+    truth_secret: "韩诚曾私签未备案随售优先谅解函，将在Pre-A轮正式交割前被远创资本拿出制造法务障碍。"

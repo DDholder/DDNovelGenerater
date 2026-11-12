@@ -1,0 +1,14 @@
+threads:
+  - id: thread_zhuixinggu_ambush
+    title: "赵乾假借宗门密信设下的坠星谷截杀局"
+    category: "vendetta"
+    status: resolved
+    planted_at: 72
+    last_progressed_at: 87
+    expected_window: [85, 90]
+    trigger_entities:
+      - char_linfan
+      - char_zhaoqian
+      - loc_zhuixinggu
+    public_clue: "林凡收到一封字迹略显生硬的同门求援飞剑传书，约其秋分夜赶赴坠星谷。"
+    truth_secret: "实为赵乾买通外门执事伪造的诱杀信，反被林凡将计就计借乱磁罡风反杀。"

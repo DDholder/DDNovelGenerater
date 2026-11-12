@@ -1,0 +1,38 @@
+threads:
+  - id: thread_mole_identity
+    title: "海关缉私处高层内鬼“灰狼”的铁证甄别"
+    category: "whodunit"
+    status: active
+    planted_at: 18
+    last_progressed_at: 24
+    expected_window: [28, 38]
+    trigger_entities:
+      - char_shenmo
+      - char_luozhen
+      - fac_haiguan_jisi
+    public_clue: "三号码头暗哨窗台留有海关高层特配的楠木烟嘴咬痕，且泄密范围仅限双匙经手人。"
+    truth_secret: "副处长罗震正是代号灰狼的内鬼，其汇丰银行秘密账户编号前半截就藏在怀表胶卷中。"
+  - id: thread_cargo_manifest
+    title: "三楼档案室9号扣押舱单的真伪玄机"
+    category: "trap"
+    status: planted
+    planted_at: 23
+    last_progressed_at: 23
+    expected_window: [26, 34]
+    trigger_entities:
+      - char_luozhen
+      - fac_heichao_zhan
+    public_clue: "罗震似有意无意在办公桌上漏出9号远洋货轮钨砂舱单的调阅批签。"
+    truth_secret: "该舱单系黑潮机关长伪造的捕蝉诱饵，任何私自拓印该编号者都会触发抓捕。"
+  - id: thread_watchmaker_will
+    title: "银壳怀表微缩胶卷背后的潜鲸计划"
+    category: "macguffin"
+    status: dormant
+    planted_at: 18
+    last_progressed_at: 21
+    expected_window: [25, 36]
+    trigger_entities:
+      - item_yinbiao_miben
+      - char_guwanqing
+    public_clue: "周伯牺牲前送入失物柜的旧银表发条盒内藏有一卷需特殊缓冲液显影的微缩胶卷。"
+    truth_secret: "胶卷记载了黑潮月底借英国邮轮偷运水雷炸毁内河船闸的潜鲸计划参数。"

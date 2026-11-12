@@ -1,0 +1,13 @@
+threads:
+  - id: thread_seed_bridge_loan
+    title: "十月份服务器租赁与研发薪资断粮危机"
+    category: "cashflow_crisis"
+    status: resolved
+    planted_at: 1
+    last_progressed_at: 7
+    expected_window: [5, 8]
+    trigger_entities:
+      - char_chenyu
+      - fac_chenxing_tech
+    public_clue: "韩诚退股抽走部分周转金后，十月底机房托管费与员工社保面临逾期。"
+    truth_secret: "陈屿暗中以个人唯一住房办理经营贷注资公司账户，按时足额发放了全员薪资。"

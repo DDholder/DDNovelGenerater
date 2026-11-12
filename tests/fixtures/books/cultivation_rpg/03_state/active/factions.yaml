@@ -1,0 +1,34 @@
+fac_qingyunmen:
+  updated_at_ch: 140
+  status: active
+  leader: null
+  territory:
+    - loc_zhuixinggu
+  current_goals:
+    - "封锁落霞峰异动消息并秘密搜捕弃徒林凡"
+    - "与赵家联手查明坠星谷古镜下落"
+  profile_ext:
+    realm: "金丹宗门"
+    techniques:
+      - "青云七峰剑诀"
+    key_items:
+      - "护山惊雷剑阵阵盘"
+    trump_cards:
+      - "剑冢历代祖师残剑共鸣"
+
+fac_beijing_yaoting:
+  updated_at_ch: 141
+  status: active
+  leader: char_suyao
+  territory:
+    - loc_beijing_gucheng
+  current_goals:
+    - "赶在老妖皇大限前寻回青铜古镜开启冰渊秘境"
+  profile_ext:
+    realm: "化神遗脉王庭"
+    techniques:
+      - "万妖血脉大阵"
+    key_items:
+      - "冰渊王帐虎符"
+    trump_cards:
+      - "极北寒潮兽潮征召令"

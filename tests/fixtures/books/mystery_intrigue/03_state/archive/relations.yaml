@@ -1,0 +1,11 @@
+relations:
+  - source: char_zhoubo
+    target: char_shenmo
+    relation: "单线垂直联络三年的老交通员与潜伏下级暗桩"
+    valid_from_ch: 1
+    invalid_at_ch: 18
+  - source: char_shenmo
+    target: char_zhoubo
+    relation: "唯一知晓自身真实信仰的单线上级与生死引路人"
+    valid_from_ch: 1
+    invalid_at_ch: 18

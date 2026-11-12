@@ -1,0 +1,21 @@
+relations:
+  - source: char_linfan
+    target: fac_qingyunmen
+    relation: "落霞峰内门真传弟子，恪守门规尊师重道"
+    valid_from_ch: 1
+    invalid_at_ch: 120
+  - source: char_linfan
+    target: fac_qingyunmen
+    relation: "遭执法堂构陷通缉的流亡弃徒，暗查师门变故真相"
+    valid_from_ch: 121
+    invalid_at_ch: null
+  - source: char_linfan
+    target: char_suyao
+    relation: "北遁途中结伴互助的同行旅伴，信任其医术但保留底牌"
+    valid_from_ch: 105
+    invalid_at_ch: null
+  - source: char_suyao
+    target: char_linfan
+    relation: "以医女身份潜伏观察其随身古宝线索的试探对象"
+    valid_from_ch: 105
+    invalid_at_ch: null

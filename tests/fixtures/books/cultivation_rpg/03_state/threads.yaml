@@ -1,0 +1,38 @@
+threads:
+  - id: thread_gujing_origin
+    title: "残缺青铜古镜的北冥渊源与缺失残角"
+    category: "artifact_mystery"
+    status: active
+    planted_at: 87
+    last_progressed_at: 141
+    expected_window: [140, 150]
+    trigger_entities:
+      - char_linfan
+      - item_gujing
+      - loc_beijing_gucheng
+    public_clue: "古镜背面刻有残缺二十八宿星纹与半枚古篆冥字，踏入北境孤城后镜缘偶有温热。"
+    truth_secret: "古镜实为北境妖庭冰渊秘境钥器半身，缺失一角正在暗星地下拍卖场压轴待拍。"
+  - id: thread_xuehunyin_curse
+    title: "气海边缘潜伏的赵家血魂印追踪禁制"
+    category: "crisis"
+    status: active
+    planted_at: 87
+    last_progressed_at: 115
+    expected_window: [142, 155]
+    trigger_entities:
+      - char_linfan
+      - rule_xuantian
+    public_clue: "赵乾临死前怨气化印附着于林凡气海边缘，入北境风雪后感应虽弱却仍未根除。"
+    truth_secret: "赵家金丹客卿已携寻血罗盘尾随进入北境，一旦林凡全力催动惊雷剑诀便会暴露精确方位。"
+  - id: thread_suyao_identity
+    title: "同行医女苏瑶的真实跟脚"
+    category: "character_secret"
+    status: dormant
+    planted_at: 105
+    last_progressed_at: 118
+    expected_window: [148, 165]
+    trigger_entities:
+      - char_suyao
+      - fac_beijing_yaoting
+    public_clue: "苏瑶虽自称南域散修医女，却对北境冰原风物与古篆纹路异常熟稔。"
+    truth_secret: "苏瑶乃北境妖庭当代天狐圣女白璃，奉密令寻回镇族圣器青铜古镜。"

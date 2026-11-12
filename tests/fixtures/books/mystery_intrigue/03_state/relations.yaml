@@ -1,0 +1,21 @@
+relations:
+  - source: char_shenmo
+    target: char_luozhen
+    relation: "受其提拔器重的门生与得力下属，公私皆颇为信赖"
+    valid_from_ch: 1
+    invalid_at_ch: 18
+  - source: char_shenmo
+    target: char_luozhen
+    relation: "表面依旧恭敬顺从、暗中列为头号内鬼嫌疑对象的博弈对手"
+    valid_from_ch: 19
+    invalid_at_ch: null
+  - source: char_shenmo
+    target: char_guwanqing
+    relation: "偶因外伤问诊结识的租界外科医师与互相试探底细的疑似同道"
+    valid_from_ch: 22
+    invalid_at_ch: null
+  - source: char_luozhen
+    target: fac_heichao_zhan
+    relation: "受海外账目把柄掣肘而秘密效命的高级内线灰狼"
+    valid_from_ch: 1
+    invalid_at_ch: null
