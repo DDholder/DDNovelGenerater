@@ -1,6 +1,11 @@
 # DDNovelGenerater 架构设计蓝图（Architecture Blueprint）
 
 > 本文档基于架构访谈共识沉淀，定义了面向百章/百万字规模长篇小说的 **Agent-Native 创作引擎套件** 完整架构规范。
+>
+> **配套工程规格文档索引**：
+> - [01-requirements-breakdown.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/01-requirements-breakdown.md) —— 需求全景拆解与 WBS 规格矩阵
+> - [02-system-architecture-design.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/02-system-architecture-design.md) —— 系统分层框架图、类图、ER 图、时序图与状态机
+> - [03-development-roadmap-and-dag.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/03-development-roadmap-and-dag.md) —— 15 步开发计划、前后依赖与串并联 DAG 流程图
 
 ---
 
@@ -169,11 +174,11 @@ char_linfan:
 
 ```mermaid
 flowchart TD
-    S1["1. 设定自由维护 (01_settings)<br>开书或中途随时增删改设定，跑影响面扫描防吃书"] --> S2["2. 结构与伏笔规划 (02_structure)<br>运行伏笔雷达巡检，编写分卷 -> 单元 -> 章节分场蓝图"]
-    S2 --> S3["3. 一步生成写作包 (04_creation/packets)<br>工具编译 ch_XXXX_packet.md，作者打开直接增删微调"]
-    S3 --> S4["4. 整章一气呵成写草稿 (04_creation/drafts)<br>执笔 Skill 仅读【写作包】按蓝图节拍完成整章草稿，完成后作者通篇审阅修改"]
-    S4 --> S5["5. 审校与定稿入库 (04_creation/manuscript)<br>一致性检查通过（临时新设定可反哺 01_settings）后，归档至正式正文目录"]
-    S5 --> S6["6. 状态覆写与事实沉淀 (03_state)<br>提取本章摘要与原子事实、直接更新活跃状态与伏笔进度、冷热归档、Git 打标并刷新 SQLite 索引"]
+    S1["1. 设定自由维护 (01_settings): 开书或中途随时增删改设定，跑影响面扫描防吃书"] --> S2["2. 结构与伏笔规划 (02_structure): 运行伏笔雷达巡检，编写分卷 -> 单元 -> 章节分场蓝图"]
+    S2 --> S3["3. 一步生成写作包 (04_creation/packets): 工具编译 ch_XXXX_packet.md，作者打开直接增删微调"]
+    S3 --> S4["4. 整章一气呵成写草稿 (04_creation/drafts): 执笔 Skill 仅读写作包按节拍完成整章草稿，完成后作者通篇审阅修改"]
+    S4 --> S5["5. 审校与定稿入库 (04_creation/manuscript): 一致性检查通过(临时新设定可反哺)后，归档至正式正文目录"]
+    S5 --> S6["6. 状态覆写与事实沉淀 (03_state): 提取本章摘要与原子事实、覆写活跃状态与伏笔进度、冷热归档并刷新索引"]
     S6 -.->|"推进下一章 / 中途调整设定"| S1
 ```
 
@@ -186,12 +191,13 @@ flowchart TD
 | 功能域 | CLI 命令 (`ddnovel ...`) | MCP Tool 名称 | 作用说明 |
 | :--- | :--- | :--- | :--- |
 | **工程管理** | `init <dir> [--host opencode\|dsh]` | — (仅 CLI) | 初始化小说四维目录骨架、题材模板及宿主 MCP/Skills 配置 |
-| **索引同步** | `index sync` / `index rebuild` | `novel_sync_index` | 文件增删改后哈希增量同步（自动清理已删词条），或从真源零污染全量重建 `index.sqlite` |
+| **设定维护** | `setting upsert / list / show` | `novel_upsert_setting` / `novel_list_settings` | **新建/修改/查阅设定**（角色、地理地形、世界规则、组织等），支持自由手改文件或工具化创建/更新并自动热同步索引 |
 | **设定影响面** | `setting impact <id_or_query>` | `novel_setting_impact` | **中途改/删设定防吃书**：扫描已定稿正文、事实台账、活跃状态、伏笔与后续蓝图中的所有引用处 |
-| **检索探查** | `search <query> [--scope ...]` | `novel_search` | 规划/审校期按关键词(FTS5)、实体ID、章号区间检索设定与历史原子事实（支持可选向量检索） |
-| **关系与状态** | `state inspect <entity_id>` | `novel_inspect_entity` | 查看某实体的静态设定切片、当前热状态截面及当前有效关系边 |
+| **结构与蓝图** | `structure volume / arc / blueprint` | `novel_upsert_volume` / `novel_upsert_arc` / `novel_upsert_blueprint` | **设计分卷、单元、章节蓝图**（生成标准结构骨架、校验出场实体与伏笔 ID 合法性，同样支持直接手改 `.md`） |
 | **伏笔雷达** | `radar [--chapter N]` | `novel_foreshadow_radar` | 扫描输出到期窗口、断线超期、出场实体关联的候选悬线与伏笔报告 |
-| **写作包编译** | `packet build <ch>` | `novel_build_packet` | 一步直出可编辑的 `04_creation/packets/ch_XXXX_packet.md` 并汇报各区块 Token 占比 |
-| **定稿与冷归档** | `chapter promote <ch>` / `state gc` | `novel_promote_chapter` / `novel_cold_archive` | 草稿定稿入库并清理超期旧草稿/旧写作包；将退场角色与已填伏笔移入冷库并摘除默认嗅探 |
-| **遗忘与瘦身** | `setting prune` / `thread drop <id>` / `history compact <vol>` | `novel_prune_unused` / `novel_drop_thread` | **物理删除瘦身**：清理废案/一次性龙套卡片、主动弃坑移除不想要的伏笔、浓缩远期卷级细碎事实 |
+| **写作包输出** | `packet build <ch>` | `novel_build_packet` / `novel_read_packet` | **一步输出单章写作包** `04_creation/packets/ch_XXXX_packet.md`（汇报各区块 Token 占比，供作者裁剪与执笔模型隔离读取） |
+| **草稿创作** | `draft save <ch>` / `draft show <ch>` | `novel_save_draft` | **写作与保存整章草稿**（配合 `dd-chapter-writer` Skill 严格仅基于本章写作包一气呵成生成 `drafts/ch_XXXX_draft.md` 供作者通篇审改） |
+| **定稿与结算** | `chapter promote <ch>` / `state update` | `novel_promote_chapter` / `novel_record_chapter_outcome` | **正式定稿入库**（归入 `manuscript/` 并清理超期旧包/旧稿），沉淀本章摘要+原子事实并覆写最新角色/组织/伏笔状态 |
+| **索引与检索** | `index sync / rebuild` / `search` / `state inspect` | `novel_sync_index` / `novel_search` / `novel_inspect_entity` | 增量或零污染全量重建 `index.sqlite`；按关键词(FTS5)、ID、章号检索设定、实体当前截面状态与历史事实 |
+| **遗忘与瘦身** | `state gc` / `setting prune` / `thread drop` / `history compact` | `novel_cold_archive` / `novel_prune_unused` / `novel_drop_thread` | **软冻结与硬删除瘦身**：退场实体/已填伏笔移入冷库、物理删除废案/一次性龙套、主动弃坑移除伏笔、浓缩远期老卷细碎事实 |
 | **一致性体检** | `audit <ch>` | `novel_audit_consistency` | 静态规则体检（检查蓝图引用 ID 是否存在/已被删、死人或冷库角色未唤醒出场、禁止词命中等） |
