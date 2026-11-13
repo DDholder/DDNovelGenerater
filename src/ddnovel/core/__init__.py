@@ -4,7 +4,9 @@ CLI 与 MCP 仅做薄封装转发，所有业务逻辑必须留在本包内。
 """
 
 from .alias_matcher import AliasMatcher
+from .impact import ImpactAnalyzer, scan_setting_impact
 from .indexer import SqliteIndexer, build_fts_query, tokenize_cjk
+from .lifecycle import LifecycleManager
 from .packet_builder import PacketBuilder, build_packet
 from .parser import (
     ProgressiveParser,
@@ -14,6 +16,7 @@ from .parser import (
     split_frontmatter,
     split_progressive_blocks,
 )
+from .radar import ForeshadowRadar, scan_foreshadow_radar
 from .vector_store import (
     DeterministicHashEmbedder,
     EmbeddingDimensionError,
@@ -32,6 +35,9 @@ __all__ = [
     "DeterministicHashEmbedder",
     "EmbeddingDimensionError",
     "EmbeddingError",
+    "ForeshadowRadar",
+    "ImpactAnalyzer",
+    "LifecycleManager",
     "PacketBuilder",
     "ProgressiveParser",
     "SqliteIndexer",
@@ -46,6 +52,8 @@ __all__ = [
     "parse_blueprint_md",
     "parse_setting_md",
     "rrf_fuse",
+    "scan_foreshadow_radar",
+    "scan_setting_impact",
     "split_frontmatter",
     "split_progressive_blocks",
     "tokenize_cjk",
