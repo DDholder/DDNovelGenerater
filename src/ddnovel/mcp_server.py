@@ -1067,7 +1067,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 cfg.dump(root)
                 updated_files.append(NOVEL_CONFIG_FILENAME)
 
-            # 3) 按需覆写角色状态截面 03_state/active/characters.yaml
+            # 3) 按需覆写角色状态截面 03_state/active/characters.yaml（含冷库唤醒）
             if character_updates:
                 chars_path = root / "03_state" / "active" / "characters.yaml"
                 raw_chars = (
@@ -1076,8 +1076,25 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     else {}
                 )
                 chars_dict: dict[str, Any] = dict(raw_chars) if isinstance(raw_chars, dict) else {}
+
+                arch_chars_path = root / "03_state" / "archive" / "characters.yaml"
+                raw_arch_chars = (
+                    yaml.safe_load(arch_chars_path.read_text(encoding="utf-8"))
+                    if arch_chars_path.is_file()
+                    else {}
+                )
+                arch_chars_dict: dict[str, Any] = (
+                    dict(raw_arch_chars) if isinstance(raw_arch_chars, dict) else {}
+                )
+                arch_chars_modified = False
+
                 for cid, patch in character_updates.items():
                     prev = chars_dict.get(cid)
+                    if prev is None and cid in arch_chars_dict:
+                        prev = arch_chars_dict[cid]
+                    if cid in arch_chars_dict:
+                        del arch_chars_dict[cid]
+                        arch_chars_modified = True
                     merged = {**(prev if isinstance(prev, dict) else {}), **dict(patch)}
                     merged.setdefault("updated_at_ch", chapter)
                     c_state = CharacterState.model_validate(merged, context=genre_ctx)
@@ -1090,7 +1107,21 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 )
                 updated_files.append(chars_path.resolve().relative_to(root).as_posix())
 
-            # 4) 按需覆写势力状态截面 03_state/active/factions.yaml
+                if arch_chars_modified:
+                    validated_arch_chars = CharacterStateFile.model_validate(
+                        arch_chars_dict, context=genre_ctx
+                    )
+                    arch_chars_path.write_text(
+                        _dump_yaml(
+                            validated_arch_chars.model_dump(
+                                mode="json", by_alias=True, exclude_none=True
+                            )
+                        ),
+                        encoding="utf-8",
+                    )
+                    updated_files.append(arch_chars_path.resolve().relative_to(root).as_posix())
+
+            # 4) 按需覆写势力状态截面 03_state/active/factions.yaml（含冷库唤醒）
             if faction_updates:
                 facs_path = root / "03_state" / "active" / "factions.yaml"
                 raw_facs = (
@@ -1099,8 +1130,25 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     else {}
                 )
                 facs_dict: dict[str, Any] = dict(raw_facs) if isinstance(raw_facs, dict) else {}
+
+                arch_facs_path = root / "03_state" / "archive" / "factions.yaml"
+                raw_arch_facs = (
+                    yaml.safe_load(arch_facs_path.read_text(encoding="utf-8"))
+                    if arch_facs_path.is_file()
+                    else {}
+                )
+                arch_facs_dict: dict[str, Any] = (
+                    dict(raw_arch_facs) if isinstance(raw_arch_facs, dict) else {}
+                )
+                arch_facs_modified = False
+
                 for fid, patch in faction_updates.items():
                     prev = facs_dict.get(fid)
+                    if prev is None and fid in arch_facs_dict:
+                        prev = arch_facs_dict[fid]
+                    if fid in arch_facs_dict:
+                        del arch_facs_dict[fid]
+                        arch_facs_modified = True
                     merged = {**(prev if isinstance(prev, dict) else {}), **dict(patch)}
                     merged.setdefault("updated_at_ch", chapter)
                     f_state = FactionState.model_validate(merged, context=genre_ctx)
@@ -1112,6 +1160,20 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     encoding="utf-8",
                 )
                 updated_files.append(facs_path.resolve().relative_to(root).as_posix())
+
+                if arch_facs_modified:
+                    validated_arch_facs = FactionStateFile.model_validate(
+                        arch_facs_dict, context=genre_ctx
+                    )
+                    arch_facs_path.write_text(
+                        _dump_yaml(
+                            validated_arch_facs.model_dump(
+                                mode="json", by_alias=True, exclude_none=True
+                            )
+                        ),
+                        encoding="utf-8",
+                    )
+                    updated_files.append(arch_facs_path.resolve().relative_to(root).as_posix())
 
             # 5) 按需更新双时态关系边 03_state/relations.yaml
             if relation_updates:

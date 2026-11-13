@@ -804,12 +804,35 @@ class LifecycleManager:
             if self._should_sync(sync_index):
                 active_indexer.sync()
 
+            cached_analyzer: Any | None = None
+            if self._impact_analyzer is None:
+                try:
+                    from .impact import ImpactAnalyzer
+
+                    cached_analyzer = ImpactAnalyzer(
+                        self._book_dir,
+                        indexer=active_indexer,
+                        parser=self._parser,
+                        config=self._config,
+                        auto_sync=False,
+                        enable_corpus_cache=True,
+                    )
+                except ImportError:
+                    cached_analyzer = None
+
             for eid in sorted(settings_map.keys()):
-                report = self._run_impact_scan(
-                    eid,
-                    active_indexer=active_indexer,
-                    after_chapter=cur_ch,
-                )
+                if cached_analyzer is not None:
+                    report = self._invoke_external_impact_analyzer(
+                        cached_analyzer,
+                        eid,
+                        after_chapter=cur_ch,
+                    )
+                else:
+                    report = self._run_impact_scan(
+                        eid,
+                        active_indexer=active_indexer,
+                        after_chapter=cur_ch,
+                    )
                 active_hits = [
                     h
                     for h in report.hits
@@ -2032,17 +2055,24 @@ class LifecycleManager:
 
     def _collect_archived_state_ids(self) -> set[str]:
         archived: set[str] = set()
+        active_chars = self._load_character_state_file(
+            self._book_dir / "03_state" / "active" / "characters.yaml"
+        )
         arch_chars = self._load_character_state_file(
             self._book_dir / "03_state" / "archive" / "characters.yaml"
         )
-        archived.update(arch_chars.root.keys())
-        arch_facs = self._load_faction_state_file(
-            self._book_dir / "03_state" / "archive" / "factions.yaml"
-        )
-        archived.update(arch_facs.root.keys())
+        archived.update(set(arch_chars.root.keys()) - set(active_chars.root.keys()))
+
         active_facs = self._load_faction_state_file(
             self._book_dir / "03_state" / "active" / "factions.yaml"
         )
+        awake_fids = {
+            fid for fid, f_state in active_facs.root.items() if f_state.status == EntityStatus.ACTIVE
+        }
+        arch_facs = self._load_faction_state_file(
+            self._book_dir / "03_state" / "archive" / "factions.yaml"
+        )
+        archived.update(set(arch_facs.root.keys()) - awake_fids)
         for fid, f_state in active_facs.root.items():
             if f_state.status in (EntityStatus.DECEASED, EntityStatus.RETIRED):
                 archived.add(fid)

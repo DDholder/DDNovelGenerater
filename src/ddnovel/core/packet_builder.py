@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Sequence
 from contextlib import contextmanager
@@ -500,12 +501,28 @@ class PacketBuilder:
         )
         return base.model_copy(update={"total": custom_budget, "slots": scaled_slots})
 
+    @staticmethod
+    def _scandir_md_files(root: Path) -> list[Path]:
+        """使用 os.scandir 递归收集目录下的全部 Markdown 文件（零额外 stat 系统调用）。"""
+        found: list[Path] = []
+        stack: list[Path] = [root]
+        while stack:
+            cur = stack.pop()
+            with os.scandir(cur) as it:
+                for entry in it:
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False) and entry.name.lower().endswith(".md"):
+                        found.append(Path(entry.path))
+        found.sort()
+        return found
+
     def _locate_and_parse_blueprint(self, chapter_num: int) -> BlueprintDoc:
         bp_root = self._book_dir / "02_structure" / "blueprints"
         if not bp_root.is_dir():
             raise FileNotFoundError(f"未找到第 {chapter_num} 章的章节蓝图文件（目录不存在: {bp_root}）")
 
-        all_files = sorted(p for p in bp_root.rglob("*.md") if p.is_file())
+        all_files = self._scandir_md_files(bp_root)
         if not all_files:
             raise FileNotFoundError(f"未找到第 {chapter_num} 章的章节蓝图文件")
 
@@ -1501,11 +1518,20 @@ class PacketBuilder:
         if not ms_root.is_dir():
             return None
 
-        all_files = sorted(p for p in ms_root.rglob("*.md") if p.is_file())
+        expected_stem = format_chapter(prev_ch, width=self._config.chapter_id_width)
+        direct_candidates: list[Path] = [ms_root / f"{expected_stem}.md"]
+        if self._active_ctx is not None and self._active_ctx.blueprint.volume_id:
+            direct_candidates.insert(
+                0, ms_root / self._active_ctx.blueprint.volume_id / f"{expected_stem}.md"
+            )
+        for cand in direct_candidates:
+            if cand.is_file():
+                return self._clean_manuscript_body(cand.read_text(encoding="utf-8"))
+
+        all_files = self._scandir_md_files(ms_root)
         if not all_files:
             return None
 
-        expected_stem = format_chapter(prev_ch, width=self._config.chapter_id_width)
         ch_stem_re = re.compile(rf"^ch_?0*{prev_ch}(?:$|[^0-9])", re.IGNORECASE)
 
         for path in all_files:

@@ -227,12 +227,21 @@ class ImpactAnalyzer:
         parser: ProgressiveParser | None = None,
         config: NovelConfig | None = None,
         auto_sync: bool = True,
+        enable_corpus_cache: bool = False,
     ) -> None:
         self._book_dir: Path = Path(book_dir).resolve()
         self._external_indexer: SqliteIndexer | None = indexer
         self._external_matcher: AliasMatcher | None = matcher
         self._auto_sync: bool = auto_sync
+        self._enable_corpus_cache: bool = enable_corpus_cache
         self._owned_indexer: SqliteIndexer | None = None
+        self._cached_full_matcher: AliasMatcher | None = None
+        self._cached_entity_meta: dict[str, tuple[str, str]] | None = None
+        self._cached_entity_terms: dict[str, list[str]] = {}
+        self._cached_manuscript_hits: dict[str, list[ImpactHit]] | None = None
+        self._cached_facts: list[tuple[str, list[ChapterFactRecord]]] | None = None
+        self._cached_yaml_models: dict[tuple[Path, str], Any] = {}
+        self._cached_blueprints: list[tuple[str, Any]] | None = None
 
         if config is not None:
             self._config = config
@@ -300,6 +309,16 @@ class ImpactAnalyzer:
     # 公共扫描入口
     # ------------------------------------------------------------------
 
+    def clear_cache(self) -> None:
+        """清空批量扫描语料缓存。"""
+        self._cached_full_matcher = None
+        self._cached_entity_meta = None
+        self._cached_entity_terms.clear()
+        self._cached_manuscript_hits = None
+        self._cached_facts = None
+        self._cached_yaml_models.clear()
+        self._cached_blueprints = None
+
     def scan_impact(
         self,
         target_id_or_keyword: str,
@@ -326,6 +345,8 @@ class ImpactAnalyzer:
         with self._use_indexer() as active_indexer:
             if should_sync:
                 active_indexer.sync()
+                if self._enable_corpus_cache:
+                    self.clear_cache()
             query = self._resolve_query(target, indexer=active_indexer)
 
         cutoff = after_chapter if after_chapter is not None else self._config.current_chapter
@@ -381,20 +402,41 @@ class ImpactAnalyzer:
             eid = str(entity_row[0])
             name = str(entity_row[1])
             file_path = str(entity_row[2] or "")
-            expanded_terms = self._collect_entity_terms(
-                eid=eid,
-                name=name,
-                file_path=file_path,
-                indexer=indexer,
-            )
-            matcher = (
-                self._external_matcher
-                if self._external_matcher is not None
-                else self._build_full_entity_matcher(
+            if self._enable_corpus_cache and self._external_matcher is None:
+                expanded_terms = self._cached_entity_terms.get(eid)
+                if expanded_terms is None:
+                    expanded_terms = self._collect_entity_terms(
+                        eid=eid,
+                        name=name,
+                        file_path=file_path,
+                        indexer=indexer,
+                    )
+                    self._cached_entity_terms[eid] = expanded_terms
+                if self._cached_full_matcher is None:
+                    self._cached_full_matcher = self._build_full_entity_matcher(indexer=indexer)
+                cached_aliases = set(self._cached_full_matcher.get_aliases(eid))
+                if all(t in cached_aliases for t in expanded_terms) and eid in cached_aliases:
+                    matcher = self._cached_full_matcher
+                else:
+                    matcher = self._build_full_entity_matcher(
+                        indexer=indexer,
+                        extra_terms=(eid, expanded_terms),
+                    )
+            else:
+                expanded_terms = self._collect_entity_terms(
+                    eid=eid,
+                    name=name,
+                    file_path=file_path,
                     indexer=indexer,
-                    extra_terms=(eid, expanded_terms),
                 )
-            )
+                matcher = (
+                    self._external_matcher
+                    if self._external_matcher is not None
+                    else self._build_full_entity_matcher(
+                        indexer=indexer,
+                        extra_terms=(eid, expanded_terms),
+                    )
+                )
             return _QuerySpec(
                 target=target,
                 entity_id=eid,
@@ -544,8 +586,71 @@ class ImpactAnalyzer:
     # 五维作用域扫描
     # ------------------------------------------------------------------
 
+    def _build_cached_manuscript_hits(self, matcher: AliasMatcher) -> dict[str, list[ImpactHit]]:
+        """在启用语料缓存时一次性扫描全部已定稿正文并按实体 ID 聚合命中。"""
+        hits_by_eid: dict[str, list[ImpactHit]] = {}
+        manuscript_dir = self._book_dir / "04_creation" / "manuscript"
+        if not manuscript_dir.is_dir():
+            return hits_by_eid
+
+        for path in sorted(manuscript_dir.rglob("*.md")):
+            if not path.is_file():
+                continue
+            content = path.read_text(encoding="utf-8")
+            raw_hits = matcher.scan_text(content, include_archived=True)
+            if not raw_hits:
+                continue
+
+            grouped: dict[str, list[MatchedEntity]] = {}
+            for hit in raw_hits:
+                if (
+                    hit.alias == hit.entity_id
+                    and _ASCII_ID_CHAR_RE.match(hit.alias[0])
+                    and not _is_id_boundary_ok(content, hit.start, hit.end)
+                ):
+                    continue
+                grouped.setdefault(hit.entity_id, []).append(hit)
+
+            if not grouped:
+                continue
+
+            rel_path = path.relative_to(self._book_dir).as_posix()
+            ch_num = _extract_chapter_num(path, content)
+            for eid, text_hits in grouped.items():
+                first = text_hits[0]
+                excerpt = _extract_context_excerpt(
+                    content,
+                    first.start,
+                    first.end,
+                    radius=60,
+                    total_hits=len(text_hits),
+                )
+                hits_by_eid.setdefault(eid, []).append(
+                    ImpactHit(
+                        scope=ImpactScope.MANUSCRIPT,
+                        location=rel_path,
+                        chapter_num=ch_num,
+                        matched_term=first.alias,
+                        excerpt=excerpt,
+                    )
+                )
+        return hits_by_eid
+
     def _scan_manuscripts(self, query: _QuerySpec) -> list[ImpactHit]:
         """维度 1：扫描 04_creation/manuscript/**/*.md 全文，每章汇总 1 条命中。"""
+        if (
+            self._enable_corpus_cache
+            and self._cached_full_matcher is not None
+            and query.matcher is self._cached_full_matcher
+            and query.entity_id is not None
+            and query.literal_eid == query.match_entity_id
+        ):
+            if self._cached_manuscript_hits is None:
+                self._cached_manuscript_hits = self._build_cached_manuscript_hits(
+                    self._cached_full_matcher
+                )
+            return list(self._cached_manuscript_hits.get(query.match_entity_id, ()))
+
         manuscript_dir = self._book_dir / "04_creation" / "manuscript"
         if not manuscript_dir.is_dir():
             return []
@@ -580,21 +685,38 @@ class ImpactAnalyzer:
             )
         return hits
 
-    def _scan_facts(self, query: _QuerySpec) -> list[ImpactHit]:
-        """维度 2：扫描 03_state/history/*_facts.jsonl 历史事实台账。"""
+    def _load_fact_records(self) -> list[tuple[str, list[ChapterFactRecord]]]:
+        """加载 03_state/history/*_facts.jsonl，在开启语料缓存时复用已解析记录。"""
+        if self._enable_corpus_cache and self._cached_facts is not None:
+            return self._cached_facts
+
         history_dir = self._book_dir / "03_state" / "history"
         if not history_dir.is_dir():
+            if self._enable_corpus_cache:
+                self._cached_facts = []
             return []
 
-        hits: list[ImpactHit] = []
+        parsed: list[tuple[str, list[ChapterFactRecord]]] = []
         for path in sorted(history_dir.glob("*_facts.jsonl")):
             if not path.is_file():
                 continue
             rel_path = path.relative_to(self._book_dir).as_posix()
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                record = ChapterFactRecord.model_validate_json(line)
+            records = [
+                ChapterFactRecord.model_validate_json(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            parsed.append((rel_path, records))
+
+        if self._enable_corpus_cache:
+            self._cached_facts = parsed
+        return parsed
+
+    def _scan_facts(self, query: _QuerySpec) -> list[ImpactHit]:
+        """维度 2：扫描 03_state/history/*_facts.jsonl 历史事实台账。"""
+        hits: list[ImpactHit] = []
+        for rel_path, records in self._load_fact_records():
+            for record in records:
                 structured_term: str | None = None
                 for eid_ref in record.entities:
                     if query.matches_structured_id(eid_ref):
@@ -683,13 +805,23 @@ class ImpactAnalyzer:
 
         return hits
 
-    def _scan_character_state_file(self, path: Path, query: _QuerySpec) -> list[ImpactHit]:
+    def _load_cached_yaml_model(self, path: Path, model_cls: type[Any]) -> Any:
+        """按路径和模型类型加载 YAML，开启语料缓存时复用已校验模型。"""
+        key = (path, model_cls.__name__)
+        if self._enable_corpus_cache and key in self._cached_yaml_models:
+            return self._cached_yaml_models[key]
         data = _load_yaml_data(path)
-        if not data:
+        model = model_cls.model_validate(data) if data else None
+        if self._enable_corpus_cache:
+            self._cached_yaml_models[key] = model
+        return model
+
+    def _scan_character_state_file(self, path: Path, query: _QuerySpec) -> list[ImpactHit]:
+        cf = self._load_cached_yaml_model(path, CharacterStateFile)
+        if cf is None:
             return []
 
         rel_path = path.relative_to(self._book_dir).as_posix()
-        cf = CharacterStateFile.model_validate(data)
         hits: list[ImpactHit] = []
 
         for char_id, c_state in cf.root.items():
@@ -738,12 +870,11 @@ class ImpactAnalyzer:
         return hits
 
     def _scan_faction_state_file(self, path: Path, query: _QuerySpec) -> list[ImpactHit]:
-        data = _load_yaml_data(path)
-        if not data:
+        ff = self._load_cached_yaml_model(path, FactionStateFile)
+        if ff is None:
             return []
 
         rel_path = path.relative_to(self._book_dir).as_posix()
-        ff = FactionStateFile.model_validate(data)
         hits: list[ImpactHit] = []
 
         for fac_id, f_state in ff.root.items():
@@ -785,12 +916,11 @@ class ImpactAnalyzer:
         return hits
 
     def _scan_world_state_file(self, path: Path, query: _QuerySpec) -> list[ImpactHit]:
-        data = _load_yaml_data(path)
-        if not data:
+        ws = self._load_cached_yaml_model(path, WorldState)
+        if ws is None:
             return []
 
         rel_path = path.relative_to(self._book_dir).as_posix()
-        ws = WorldState.model_validate(data)
         details: list[str] = []
         text_terms: list[str] = []
 
@@ -819,12 +949,11 @@ class ImpactAnalyzer:
         after_chapter: int | None,
         filter_active: bool,
     ) -> list[ImpactHit]:
-        data = _load_yaml_data(path)
-        if not data:
+        rel_file = self._load_cached_yaml_model(path, RelationsFile)
+        if rel_file is None:
             return []
 
         rel_path = path.relative_to(self._book_dir).as_posix()
-        rel_file = RelationsFile.model_validate(data)
         hits: list[ImpactHit] = []
 
         for rel in rel_file.relations:
@@ -861,12 +990,11 @@ class ImpactAnalyzer:
     def _scan_threads(self, query: _QuerySpec) -> list[ImpactHit]:
         """维度 4：扫描 03_state/threads.yaml 中未完结伏笔（不含 archive/threads.yaml）。"""
         threads_path = self._book_dir / "03_state" / "threads.yaml"
-        data = _load_yaml_data(threads_path)
-        if not data:
+        threads_file = self._load_cached_yaml_model(threads_path, ThreadsFile)
+        if threads_file is None:
             return []
 
         rel_path = threads_path.relative_to(self._book_dir).as_posix()
-        threads_file = ThreadsFile.model_validate(data)
         hits: list[ImpactHit] = []
 
         for thread in threads_file.threads:
@@ -917,17 +1045,33 @@ class ImpactAnalyzer:
             )
         return hits
 
-    def _scan_blueprints(self, query: _QuerySpec, *, cutoff: int) -> list[ImpactHit]:
-        """维度 5：扫描 02_structure/blueprints/**/*.md 中 chapter > cutoff 的后续蓝图。"""
+    def _load_blueprints(self) -> list[tuple[str, Any]]:
+        """加载 02_structure/blueprints/**/*.md，在开启语料缓存时复用解析结果。"""
+        if self._enable_corpus_cache and self._cached_blueprints is not None:
+            return self._cached_blueprints
+
         bp_dir = self._book_dir / "02_structure" / "blueprints"
         if not bp_dir.is_dir():
+            if self._enable_corpus_cache:
+                self._cached_blueprints = []
             return []
 
-        hits: list[ImpactHit] = []
+        parsed: list[tuple[str, Any]] = []
         for path in sorted(bp_dir.rglob("*.md")):
             if not path.is_file():
                 continue
+            rel_path = path.relative_to(self._book_dir).as_posix()
             bp = self._parser.parse_blueprint_md(path, book_dir=self._book_dir)
+            parsed.append((rel_path, bp))
+
+        if self._enable_corpus_cache:
+            self._cached_blueprints = parsed
+        return parsed
+
+    def _scan_blueprints(self, query: _QuerySpec, *, cutoff: int) -> list[ImpactHit]:
+        """维度 5：扫描 02_structure/blueprints/**/*.md 中 chapter > cutoff 的后续蓝图。"""
+        hits: list[ImpactHit] = []
+        for rel_path, bp in self._load_blueprints():
             if bp.chapter <= cutoff:
                 continue
 
@@ -985,7 +1129,6 @@ class ImpactAnalyzer:
 
             matched_term = text_terms[0] if text_terms else struct_terms[0]
             all_parts = _dedupe_non_empty([*text_details, *struct_fields])
-            rel_path = path.relative_to(self._book_dir).as_posix()
             hits.append(
                 ImpactHit(
                     scope=ImpactScope.BLUEPRINT,
@@ -1058,7 +1201,7 @@ def scan_setting_impact(
     **kwargs: Any,
 ) -> ImpactReport:
     """一步执行设定或关键词的五维防吃书影响面扫描。"""
-    init_keys = ("indexer", "matcher", "parser", "config", "auto_sync")
+    init_keys = ("indexer", "matcher", "parser", "config", "auto_sync", "enable_corpus_cache")
     init_kwargs = {k: kwargs.pop(k) for k in init_keys if k in kwargs}
     with ImpactAnalyzer(book_dir, **init_kwargs) as analyzer:
         return analyzer.scan_impact(target_id_or_keyword, **kwargs)

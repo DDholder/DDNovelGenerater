@@ -2100,7 +2100,7 @@ def state_update_cmd(
             )
             updated_files.append(ws_path.relative_to(bdir).as_posix())
 
-    # 3. 更新 active/characters.yaml
+    # 3. 更新 active/characters.yaml（含冷库唤醒）
     char_updates = _parse_structured_kv_or_mapping(char_state)
     if isinstance(payload.get("characters"), dict):
         char_updates.update(payload["characters"])
@@ -2116,10 +2116,38 @@ def state_update_cmd(
             context=val_ctx,
         )
         merged_chars = dict(cf.root)
+
+        arch_chars_path = bdir / "03_state" / "archive" / "characters.yaml"
+        raw_arch_chars = (
+            yaml.safe_load(arch_chars_path.read_text(encoding="utf-8"))
+            if arch_chars_path.is_file()
+            else {}
+        )
+        arch_cf = CharacterStateFile.model_validate(
+            raw_arch_chars if isinstance(raw_arch_chars, dict) else {},
+            context=val_ctx,
+        )
+        arch_chars = dict(arch_cf.root)
+        arch_chars_modified = False
+
         for cid, c_dict in char_updates.items():
+            merged_input = dict(c_dict)
+            if cid in arch_chars:
+                arch_state = arch_chars.pop(cid)
+                arch_chars_modified = True
+                if cid not in merged_chars:
+                    merged_input = {
+                        **arch_state.model_dump(mode="json", by_alias=True, exclude_none=True),
+                        **merged_input,
+                    }
+            elif cid in merged_chars:
+                merged_input = {
+                    **merged_chars[cid].model_dump(mode="json", by_alias=True, exclude_none=True),
+                    **merged_input,
+                }
             if "updated_at_ch" not in c_dict and resolved_ch is not None:
-                c_dict = {**c_dict, "updated_at_ch": int(resolved_ch)}
-            merged_chars[cid] = CharacterState.model_validate(c_dict, context=val_ctx)
+                merged_input["updated_at_ch"] = int(resolved_ch)
+            merged_chars[cid] = CharacterState.model_validate(merged_input, context=val_ctx)
         chars_path.parent.mkdir(parents=True, exist_ok=True)
         chars_path.write_text(
             _dump_yaml(
@@ -2131,7 +2159,18 @@ def state_update_cmd(
         )
         updated_files.append(chars_path.relative_to(bdir).as_posix())
 
-    # 4. 更新 active/factions.yaml
+        if arch_chars_modified:
+            arch_chars_path.write_text(
+                _dump_yaml(
+                    CharacterStateFile(root=arch_chars).model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    )
+                ),
+                encoding="utf-8",
+            )
+            updated_files.append(arch_chars_path.relative_to(bdir).as_posix())
+
+    # 4. 更新 active/factions.yaml（含冷库唤醒）
     fac_updates = _parse_structured_kv_or_mapping(faction_state)
     if isinstance(payload.get("factions"), dict):
         fac_updates.update(payload["factions"])
@@ -2147,10 +2186,38 @@ def state_update_cmd(
             context=val_ctx,
         )
         merged_facs = dict(ff.root)
+
+        arch_facs_path = bdir / "03_state" / "archive" / "factions.yaml"
+        raw_arch_facs = (
+            yaml.safe_load(arch_facs_path.read_text(encoding="utf-8"))
+            if arch_facs_path.is_file()
+            else {}
+        )
+        arch_ff = FactionStateFile.model_validate(
+            raw_arch_facs if isinstance(raw_arch_facs, dict) else {},
+            context=val_ctx,
+        )
+        arch_facs = dict(arch_ff.root)
+        arch_facs_modified = False
+
         for fid, f_dict in fac_updates.items():
+            merged_input = dict(f_dict)
+            if fid in arch_facs:
+                arch_f_state = arch_facs.pop(fid)
+                arch_facs_modified = True
+                if fid not in merged_facs:
+                    merged_input = {
+                        **arch_f_state.model_dump(mode="json", by_alias=True, exclude_none=True),
+                        **merged_input,
+                    }
+            elif fid in merged_facs:
+                merged_input = {
+                    **merged_facs[fid].model_dump(mode="json", by_alias=True, exclude_none=True),
+                    **merged_input,
+                }
             if "updated_at_ch" not in f_dict and resolved_ch is not None:
-                f_dict = {**f_dict, "updated_at_ch": int(resolved_ch)}
-            merged_facs[fid] = FactionState.model_validate(f_dict, context=val_ctx)
+                merged_input["updated_at_ch"] = int(resolved_ch)
+            merged_facs[fid] = FactionState.model_validate(merged_input, context=val_ctx)
         facs_path.parent.mkdir(parents=True, exist_ok=True)
         facs_path.write_text(
             _dump_yaml(
@@ -2161,6 +2228,17 @@ def state_update_cmd(
             encoding="utf-8",
         )
         updated_files.append(facs_path.relative_to(bdir).as_posix())
+
+        if arch_facs_modified:
+            arch_facs_path.write_text(
+                _dump_yaml(
+                    FactionStateFile(root=arch_facs).model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    )
+                ),
+                encoding="utf-8",
+            )
+            updated_files.append(arch_facs_path.relative_to(bdir).as_posix())
 
     # 5. 更新 relations.yaml
     eff_ch = int(resolved_ch) if resolved_ch is not None else max(1, cfg.current_chapter)

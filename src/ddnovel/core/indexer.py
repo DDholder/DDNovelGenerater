@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import time
@@ -66,7 +67,9 @@ CREATE TABLE IF NOT EXISTS file_hashes (
     rel_path TEXT PRIMARY KEY,
     sha256 TEXT NOT NULL,
     category TEXT NOT NULL,
-    synced_at REAL NOT NULL
+    synced_at REAL NOT NULL,
+    mtime_ns INTEGER,
+    file_size INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_file_hashes_category ON file_hashes(category);
 
@@ -208,33 +211,37 @@ def tokenize_cjk(text: str) -> str:
 
     保证二字特定人名与单字在 SQLite FTS5 虚拟表中具备 100% 召回率。
     """
-    if not text or not text.strip():
+    if not text:
+        return ""
+    raw_text = text.strip()
+    if not raw_text:
         return ""
 
-    raw_text = text.strip()
-    word_tokens = _WORD_RE.findall(raw_text)
-    jieba_tokens = [t.strip() for t in jieba.cut_for_search(raw_text) if t.strip()]
+    word_tokens = [w for w in _WORD_RE.findall(raw_text) if w.strip("_")]
+    subword_tokens = [
+        part for w in word_tokens if "_" in w for part in w.split("_") if part
+    ]
 
     cjk_seqs = _CJK_RE.findall(raw_text)
-    unigrams: list[str] = []
-    bigrams: list[str] = []
-    for seq in cjk_seqs:
-        unigrams.extend(list(seq))
-        if len(seq) >= 2:
-            bigrams.extend([seq[i : i + 2] for i in range(len(seq) - 1)])
+    if cjk_seqs:
+        unique_cjk_seqs = list(dict.fromkeys(cjk_seqs))
+        jieba_tokens = [
+            t for t in jieba.cut_for_search(" ".join(unique_cjk_seqs)) if t and t != " "
+        ]
+        unigrams: list[str] = []
+        bigrams: list[str] = []
+        for seq in unique_cjk_seqs:
+            unigrams.extend(seq)
+            seq_len = len(seq)
+            if seq_len >= 2:
+                bigrams.extend(seq[i : i + 2] for i in range(seq_len - 1))
+        all_tokens = [*word_tokens, *subword_tokens, *jieba_tokens, *bigrams, *unigrams]
+    else:
+        all_tokens = [*word_tokens, *subword_tokens]
 
-    all_tokens = [*word_tokens, *jieba_tokens, *bigrams, *unigrams]
-    seen: set[str] = set()
-    clean_tokens: list[str] = []
-    for tok in all_tokens:
-        tok_clean = tok.strip()
-        if not tok_clean or _PUNCTUATION_PATTERN.match(tok_clean):
-            continue
-        if tok_clean not in seen:
-            seen.add(tok_clean)
-            clean_tokens.append(tok_clean)
-
-    return " ".join(clean_tokens)
+    if not all_tokens:
+        return ""
+    return " ".join(dict.fromkeys(all_tokens))
 
 
 def build_fts_query(raw_query: str) -> str:
@@ -373,6 +380,13 @@ class SqliteIndexer:
         cols = {row[1] for row in cursor.fetchall()}
         if cols and "state_file" not in cols:
             conn.execute("ALTER TABLE entities ADD COLUMN state_file TEXT")
+        fh_cursor = conn.execute("PRAGMA table_info(file_hashes)")
+        fh_cols = {row[1] for row in fh_cursor.fetchall()}
+        if fh_cols:
+            if "mtime_ns" not in fh_cols:
+                conn.execute("ALTER TABLE file_hashes ADD COLUMN mtime_ns INTEGER")
+            if "file_size" not in fh_cols:
+                conn.execute("ALTER TABLE file_hashes ADD COLUMN file_size INTEGER")
         conn.executescript(_SCHEMA_DDL)
         conn.commit()
 
@@ -381,13 +395,49 @@ class SqliteIndexer:
         conn = self._ensure_connected()
         t0 = time.perf_counter()
 
-        disk_files = self._scan_disk_files()
+        disk_entries = self._scan_disk_files_with_stat()
+        disk_files: dict[str, str] = {k: v[0] for k, v in disk_entries.items()}
 
-        # 计算磁盘文件的 SHA-256 哈希
+        if force_rebuild:
+            db_meta: dict[str, tuple[str, int | None, int | None, float]] = {}
+            db_hashes: dict[str, str] = {}
+        else:
+            db_rows = conn.execute(
+                "SELECT rel_path, sha256, mtime_ns, file_size, synced_at FROM file_hashes"
+            ).fetchall()
+            db_meta = {
+                str(r[0]): (
+                    str(r[1]),
+                    int(r[2]) if r[2] is not None else None,
+                    int(r[3]) if r[3] is not None else None,
+                    float(r[4]),
+                )
+                for r in db_rows
+            }
+            db_hashes = {rp: vals[0] for rp, vals in db_meta.items()}
+
+        # 计算磁盘文件的 SHA-256 哈希（带防竞态 stat 短路缓存）
         disk_hashes: dict[str, str] = {}
-        for rel_path in disk_files:
-            abs_p = self._book_dir / rel_path
-            disk_hashes[rel_path] = hashlib.sha256(abs_p.read_bytes()).hexdigest()
+        racy_refreshed: list[tuple[float, int, int, str]] = []
+        now = time.time()
+        now_ns = int(now * 1_000_000_000)
+        for rel_path, (_, st_mtime_ns, st_size) in disk_entries.items():
+            meta = db_meta.get(rel_path)
+            if (
+                meta is not None
+                and meta[1] is not None
+                and meta[2] is not None
+                and st_mtime_ns == meta[1]
+                and st_size == meta[2]
+                and (int(meta[3] * 1_000_000_000) - st_mtime_ns) > 50_000_000
+            ):
+                disk_hashes[rel_path] = meta[0]
+            else:
+                abs_p = self._book_dir / rel_path
+                sha = hashlib.sha256(abs_p.read_bytes()).hexdigest()
+                disk_hashes[rel_path] = sha
+                if meta is not None and sha == meta[0] and (now_ns - st_mtime_ns) > 50_000_000:
+                    racy_refreshed.append((now, st_mtime_ns, st_size, rel_path))
 
         with conn:
             if force_rebuild:
@@ -401,10 +451,6 @@ class SqliteIndexer:
                 conn.execute("DELETE FROM chapter_facts")
                 if self._vector_plugin is not None:
                     self._vector_plugin.clear(conn=conn)
-                db_hashes: dict[str, str] = {}
-            else:
-                db_rows = conn.execute("SELECT rel_path, sha256 FROM file_hashes").fetchall()
-                db_hashes = {str(r[0]): str(r[1]) for r in db_rows}
 
             added: list[str] = sorted(p for p in disk_files if p not in db_hashes)
             updated: list[str] = sorted(
@@ -422,24 +468,47 @@ class SqliteIndexer:
                 self._cascade_delete_file(p)
 
             # 3. 统一摄入已变更文件的最新内容并更新哈希 (Phase 2: Ingest & Hash Update)
+            updated_rows: list[tuple[str, float, int, int, str]] = []
             for p in updated:
                 self._ingest_file(p, disk_files[p])
-                now = time.time()
-                conn.execute(
-                    "UPDATE file_hashes SET sha256 = ?, synced_at = ? WHERE rel_path = ?",
-                    (disk_hashes[p], now, p),
+                _, st_mtime_ns, st_size = disk_entries[p]
+                updated_rows.append((disk_hashes[p], now, st_mtime_ns, st_size, p))
+            if updated_rows:
+                conn.executemany(
+                    """
+                    UPDATE file_hashes
+                    SET sha256 = ?, synced_at = ?, mtime_ns = ?, file_size = ?
+                    WHERE rel_path = ?
+                    """,
+                    updated_rows,
                 )
 
-            # 3. 解析摄入新增的文件
+            # 4. 解析摄入新增的文件
+            added_rows: list[tuple[str, str, str, float, int, int]] = []
             for p in added:
                 self._ingest_file(p, disk_files[p])
-                now = time.time()
-                conn.execute(
-                    "INSERT INTO file_hashes (rel_path, sha256, category, synced_at) VALUES (?, ?, ?, ?)",
-                    (p, disk_hashes[p], disk_files[p], now),
+                cat, st_mtime_ns, st_size = disk_entries[p]
+                added_rows.append((p, disk_hashes[p], cat, now, st_mtime_ns, st_size))
+            if added_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO file_hashes (rel_path, sha256, category, synced_at, mtime_ns, file_size)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    added_rows,
                 )
 
-        # 4. 同步向量检索插件
+            if racy_refreshed:
+                conn.executemany(
+                    """
+                    UPDATE file_hashes
+                    SET synced_at = ?, mtime_ns = ?, file_size = ?
+                    WHERE rel_path = ?
+                    """,
+                    racy_refreshed,
+                )
+
+        # 5. 同步向量检索插件
         if self._vector_plugin is not None and self._vector_plugin.is_enabled():
             self._sync_vector_plugin()
 
@@ -456,50 +525,82 @@ class SqliteIndexer:
         """零污染全量重建数据库缓存。"""
         return self.sync(force_rebuild=True)
 
-    def _scan_disk_files(self) -> dict[str, str]:
-        """扫描磁盘有效源文件，返回相对 POSIX 路径到所属分类的映射字典。"""
-        results: dict[str, str] = {}
+    @staticmethod
+    def _scandir_recursive(
+        root: Path,
+        *,
+        extensions: tuple[str, ...],
+    ) -> list[tuple[Path, os.stat_result]]:
+        """使用 os.scandir 递归收集指定后缀的文件与 stat 结果，减少 Win32 stat 系统调用。"""
+        results: list[tuple[Path, os.stat_result]] = []
+        stack: list[Path] = [root]
+        while stack:
+            current = stack.pop()
+            try:
+                with os.scandir(current) as it:
+                    entries = sorted(it, key=lambda e: e.name)
+            except OSError:
+                continue
+            dirs: list[Path] = []
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    dirs.append(Path(entry.path))
+                elif entry.is_file() and entry.name.endswith(extensions):
+                    results.append((Path(entry.path), entry.stat()))
+            stack.extend(reversed(dirs))
+        return results
+
+    def _scan_disk_files_with_stat(self) -> dict[str, tuple[str, int, int]]:
+        """使用 os.scandir 扫描磁盘有效源文件，返回 {相对 POSIX 路径: (分类, mtime_ns, size)}。"""
+        results: dict[str, tuple[str, int, int]] = {}
+        book_dir = self._book_dir
 
         # 1. 01_settings/
-        settings_dir = self._book_dir / "01_settings"
+        settings_dir = book_dir / "01_settings"
         if settings_dir.is_dir():
-            for p in sorted(settings_dir.rglob("*.md")):
-                if p.is_file():
-                    rel = p.relative_to(self._book_dir).as_posix()
-                    results[rel] = "setting"
+            for p, st in self._scandir_recursive(settings_dir, extensions=(".md",)):
+                rel = p.relative_to(book_dir).as_posix()
+                results[rel] = ("setting", st.st_mtime_ns, st.st_size)
 
         # 2. 02_structure/
-        structure_dir = self._book_dir / "02_structure"
+        structure_dir = book_dir / "02_structure"
         if structure_dir.is_dir():
-            for p in sorted(structure_dir.rglob("*.md")):
-                if p.is_file():
-                    rel = p.relative_to(self._book_dir).as_posix()
-                    results[rel] = "blueprint" if "blueprints" in p.parts else "structure"
+            for p, st in self._scandir_recursive(structure_dir, extensions=(".md",)):
+                rel = p.relative_to(book_dir).as_posix()
+                cat = "blueprint" if "blueprints" in p.relative_to(structure_dir).parts else "structure"
+                results[rel] = (cat, st.st_mtime_ns, st.st_size)
 
         # 3. 03_state/
-        state_dir = self._book_dir / "03_state"
+        state_dir = book_dir / "03_state"
         if state_dir.is_dir():
-            for ext in ("*.yaml", "*.yml"):
-                for p in sorted(state_dir.rglob(ext)):
-                    if p.is_file():
-                        rel = p.relative_to(self._book_dir).as_posix()
-                        results[rel] = "state"
+            for p, st in self._scandir_recursive(state_dir, extensions=(".yaml", ".yml")):
+                rel = p.relative_to(book_dir).as_posix()
+                results[rel] = ("state", st.st_mtime_ns, st.st_size)
             history_dir = state_dir / "history"
             if history_dir.is_dir():
-                for p in sorted(history_dir.glob("*_facts.jsonl")):
-                    if p.is_file():
-                        rel = p.relative_to(self._book_dir).as_posix()
-                        results[rel] = "fact"
+                try:
+                    with os.scandir(history_dir) as it:
+                        h_entries = sorted(it, key=lambda e: e.name)
+                except OSError:
+                    h_entries = []
+                for entry in h_entries:
+                    if entry.is_file() and entry.name.endswith("_facts.jsonl"):
+                        st = entry.stat()
+                        rel = Path(entry.path).relative_to(book_dir).as_posix()
+                        results[rel] = ("fact", st.st_mtime_ns, st.st_size)
 
         # 4. 04_creation/manuscript/
-        manuscript_dir = self._book_dir / "04_creation" / "manuscript"
+        manuscript_dir = book_dir / "04_creation" / "manuscript"
         if manuscript_dir.is_dir():
-            for p in sorted(manuscript_dir.rglob("*.md")):
-                if p.is_file():
-                    rel = p.relative_to(self._book_dir).as_posix()
-                    results[rel] = "manuscript"
+            for p, st in self._scandir_recursive(manuscript_dir, extensions=(".md",)):
+                rel = p.relative_to(book_dir).as_posix()
+                results[rel] = ("manuscript", st.st_mtime_ns, st.st_size)
 
         return results
+
+    def _scan_disk_files(self) -> dict[str, str]:
+        """扫描磁盘有效源文件，返回相对 POSIX 路径到所属分类的映射字典。"""
+        return {k: v[0] for k, v in self._scan_disk_files_with_stat().items()}
 
     def _cascade_delete_file(self, rel_path: str) -> None:
         """原子级联删除源文件对应的所有派生表记录。"""
@@ -629,7 +730,8 @@ class SqliteIndexer:
                 secret_text = excluded.secret_text,
                 tags_json = excluded.tags_json,
                 is_archived = CASE
-                    WHEN excluded.is_archived = 1 OR entities.is_archived = 1 THEN 1
+                    WHEN excluded.is_archived = 1 THEN 1
+                    WHEN entities.state_file LIKE '%archive%' THEN 1
                     ELSE 0
                 END
             """,
@@ -799,6 +901,16 @@ class SqliteIndexer:
             cf = CharacterStateFile.model_validate(data)
             archived_flag = 1 if is_archive else 0
             for eid, c_state in cf.root.items():
+                if is_archive:
+                    existing = conn.execute(
+                        "SELECT state_file FROM entities WHERE id = ?", (eid,)
+                    ).fetchone()
+                    if (
+                        existing is not None
+                        and existing[0]
+                        and str(existing[0]).startswith("03_state/active/")
+                    ):
+                        continue
                 state_json = c_state.model_dump_json()
                 conn.execute(
                     """
@@ -837,8 +949,22 @@ class SqliteIndexer:
 
         elif posix_path.endswith("factions.yaml"):
             ff = FactionStateFile.model_validate(data)
-            archived_flag = 1 if is_archive else 0
             for eid, f_state in ff.root.items():
+                if is_archive:
+                    existing = conn.execute(
+                        "SELECT state_file FROM entities WHERE id = ?", (eid,)
+                    ).fetchone()
+                    if (
+                        existing is not None
+                        and existing[0]
+                        and str(existing[0]).startswith("03_state/active/")
+                    ):
+                        continue
+                archived_flag = (
+                    1
+                    if (is_archive or f_state.status in (EntityStatus.DECEASED, EntityStatus.RETIRED))
+                    else 0
+                )
                 state_json = f_state.model_dump_json()
                 conn.execute(
                     """
@@ -880,18 +1006,15 @@ class SqliteIndexer:
         conn = self._ensure_connected()
         abs_p = self._book_dir / rel_path
         lines = abs_p.read_text(encoding="utf-8").splitlines()
+        chapter_fact_rows: list[tuple[int, str, str, str, str, str, str, str]] = []
+        fts_doc_rows: list[tuple[str, str, int, None, str, str, str]] = []
         for line in lines:
             if not line.strip():
                 continue
             r = ChapterFactRecord.model_validate_json(line)
             facts_json = json.dumps(r.facts, ensure_ascii=False)
             entities_json = json.dumps(r.entities, ensure_ascii=False)
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO chapter_facts (
-                    ch, volume_id, arc_id, in_world_time, summary, facts_json, entities_json, source_file
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            chapter_fact_rows.append(
                 (
                     r.ch,
                     r.volume_id or "",
@@ -901,14 +1024,9 @@ class SqliteIndexer:
                     facts_json,
                     entities_json,
                     rel_path,
-                ),
+                )
             )
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO fts_docs (
-                    doc_id, scope, chapter_num, entity_id, tokenized_text, raw_excerpt, source_file
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+            fts_doc_rows.append(
                 (
                     f"fact:ch_{r.ch:04d}:summary",
                     FtsScope.SUMMARY.value,
@@ -917,15 +1035,10 @@ class SqliteIndexer:
                     tokenize_cjk(r.summary),
                     r.summary,
                     rel_path,
-                ),
+                )
             )
             for idx, fact in enumerate(r.facts):
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO fts_docs (
-                        doc_id, scope, chapter_num, entity_id, tokenized_text, raw_excerpt, source_file
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
+                fts_doc_rows.append(
                     (
                         f"fact:ch_{r.ch:04d}:fact_{idx + 1}",
                         FtsScope.FACT.value,
@@ -934,8 +1047,27 @@ class SqliteIndexer:
                         tokenize_cjk(fact),
                         fact,
                         rel_path,
-                    ),
+                    )
                 )
+
+        if chapter_fact_rows:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO chapter_facts (
+                    ch, volume_id, arc_id, in_world_time, summary, facts_json, entities_json, source_file
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                chapter_fact_rows,
+            )
+        if fts_doc_rows:
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO fts_docs (
+                    doc_id, scope, chapter_num, entity_id, tokenized_text, raw_excerpt, source_file
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                fts_doc_rows,
+            )
 
     def _ingest_manuscript(self, rel_path: str) -> None:
         """解析并入库 04_creation/manuscript/ 章节正文切片。"""
