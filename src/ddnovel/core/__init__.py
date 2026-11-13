@@ -2,3 +2,21 @@
 
 CLI 与 MCP 仅做薄封装转发，所有业务逻辑必须留在本包内。
 """
+
+from .parser import (
+    ProgressiveParser,
+    estimate_tokens,
+    parse_blueprint_md,
+    parse_setting_md,
+    split_frontmatter,
+    split_progressive_blocks,
+)
+
+__all__ = [
+    "ProgressiveParser",
+    "estimate_tokens",
+    "parse_blueprint_md",
+    "parse_setting_md",
+    "split_frontmatter",
+    "split_progressive_blocks",
+]
