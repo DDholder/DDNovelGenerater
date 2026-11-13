@@ -12,13 +12,35 @@ from .parser import (
     split_frontmatter,
     split_progressive_blocks,
 )
+from .vector_store import (
+    DeterministicHashEmbedder,
+    EmbeddingDimensionError,
+    EmbeddingError,
+    VectorDocument,
+    VectorPlugin,
+    VectorSyncStats,
+    cosine_similarity,
+    pack_f32,
+    rrf_fuse,
+    unpack_f32,
+)
 
 __all__ = [
     "AliasMatcher",
+    "DeterministicHashEmbedder",
+    "EmbeddingDimensionError",
+    "EmbeddingError",
     "ProgressiveParser",
+    "VectorDocument",
+    "VectorPlugin",
+    "VectorSyncStats",
+    "cosine_similarity",
     "estimate_tokens",
+    "pack_f32",
     "parse_blueprint_md",
     "parse_setting_md",
+    "rrf_fuse",
     "split_frontmatter",
     "split_progressive_blocks",
+    "unpack_f32",
 ]
