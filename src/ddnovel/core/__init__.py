@@ -4,6 +4,7 @@ CLI 与 MCP 仅做薄封装转发，所有业务逻辑必须留在本包内。
 """
 
 from .alias_matcher import AliasMatcher
+from .indexer import SqliteIndexer, build_fts_query, tokenize_cjk
 from .parser import (
     ProgressiveParser,
     estimate_tokens,
@@ -31,9 +32,11 @@ __all__ = [
     "EmbeddingDimensionError",
     "EmbeddingError",
     "ProgressiveParser",
+    "SqliteIndexer",
     "VectorDocument",
     "VectorPlugin",
     "VectorSyncStats",
+    "build_fts_query",
     "cosine_similarity",
     "estimate_tokens",
     "pack_f32",
@@ -42,5 +45,6 @@ __all__ = [
     "rrf_fuse",
     "split_frontmatter",
     "split_progressive_blocks",
+    "tokenize_cjk",
     "unpack_f32",
 ]
