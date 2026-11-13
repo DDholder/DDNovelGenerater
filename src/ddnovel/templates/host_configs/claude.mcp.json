@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ddnovel": {
+      "type": "stdio",
+      "command": "ddnovel-mcp",
+      "args": [],
+      "env": {
+        "DDNOVEL_BOOK_DIR": "."
+      }
+    }
+  }
+}

@@ -1,0 +1,579 @@
+general:
+  premise: "立足当代现实与职场博弈，围绕理想坚守、利益冲突与人性抉择展开长线叙事。"
+  settings:
+    - path: "01_settings/world/world_overview.md"
+      id: "world_overview"
+      name: "现代都市行业生态"
+      aliases:
+        - "当代背景"
+      category: "world"
+      status: "active"
+      tags:
+        - "世界观"
+        - "都市"
+      core_text: "故事发生于二十一世纪二十年代的沿海中心城市，产业升级与资本周期交织，专业规则与人情博弈并存。"
+      topic_name: "行业潜规则"
+      topic_text: "招投标与项目评审讲究合规留痕与可验证交付，越是关键节点越需防范口头承诺。"
+      secret_text: "表面看似平稳的行业秩序下，旧派巨头与新锐力量已围绕核心标准争夺暗流涌动。"
+    - path: "01_settings/geography/loc_starter_stage.md"
+      id: "loc_starter_stage"
+      name: "滨海高新区创研园"
+      aliases:
+        - "创研园"
+      category: "geography"
+      status: "active"
+      tags:
+        - "核心舞台"
+      core_text: "位于滨海市南岸的科技孵化园区，写字楼通宵灯火不息，楼下便利店与咖啡亭见证了无数团队的起落。"
+      topic_name: "园区夜间动线"
+      topic_text: "晚十点后只保留东门刷卡通道，地下一层档案室与机房共用备用供电回路。"
+      secret_text: "创研园三期老厂房地下仍保留着十年前某研究所撤离时封存的旧测试管廊。"
+    - path: "01_settings/factions/fac_main_org.md"
+      id: "fac_main_org"
+      name: "启明项目组"
+      aliases:
+        - "启明团队"
+      category: "faction"
+      status: "active"
+      tags:
+        - "主角阵营"
+      core_text: "由主角发起的精干技术攻关小组，成员不足十人，正背水一战冲刺年度标杆项目交付。"
+      topic_name: "内部协作机制"
+      topic_text: "每周五晚进行全量进度复盘，关键数据与合同底稿实行双人交叉复核。"
+      secret_text: "项目组早年签署过一份附带隐性回购条款的种子轮补充协议，目前仅少数核心知情。"
+    - path: "01_settings/characters/char_protagonist.md"
+      id: "char_protagonist"
+      name: "陆沉"
+      aliases:
+        - "陆工"
+      category: "character"
+      status: "active"
+      tags:
+        - "主角"
+      core_text: "三十岁上下，沉稳克制、习惯在压力下保持冷静推演的骨干负责人。常穿深色防风外套，随身携带一本翻旧的黑色笔记本。"
+      topic_name: "决断习惯"
+      topic_text: "面对突发危机时，陆沉会先核对时间线与可验证事实，再在纸面列出三条备选退路。"
+      secret_text: "陆沉三年前主动离开原大厂，实为调查导师当年离奇撤项的真正内幕。"
+    - path: "01_settings/items/item_key_token.md"
+      id: "item_key_token"
+      name: "加密银色移动盘"
+      aliases:
+        - "银色移动盘"
+      category: "item"
+      status: "active"
+      tags:
+        - "关键物品"
+      core_text: "外壳刻有编号的军工级抗震加密移动硬盘，内含核心工程基线与历史审计日志。"
+      topic_name: "口令校验规则"
+      topic_text: "连续三次输入错误校验码会触发硬件只读锁定，必须由主密钥签发方重置。"
+      secret_text: "盘内隐藏分区中还保存着一份未公开的旧项目原始签字扫描件。"
+  volume:
+    id: "vol_01"
+    title: "破局立锚"
+    chapter_range: [1, 30]
+    core_conflict: "主角团队必须在资金与时间双重倒计时内完成关键交付，同时揭开外部施压背后的真正推手。"
+    body: |
+      ## 卷级起承转合
+      - **第 1～10 章**：风波初起，团队接手硬骨头任务并发现异常线索。
+      - **第 11～20 章**：多方角力升级，内部短板暴露与外部围堵接踵而至。
+      - **第 21～30 章**：正面破局拿下首战胜利，顺势撬开下一阶段更大棋局。
+  arc:
+    id: "vol_01_arc_01"
+    volume_id: "vol_01"
+    title: "暗夜启程"
+    chapter_range: [1, 10]
+    body: |
+      ## 单元核心看点
+      确立主角性格底色、团队初始困境与全书第一条核心悬线。
+  blueprint:
+    chapter: 1
+    volume_id: "vol_01"
+    arc_id: "vol_01_arc_01"
+    title: "深夜来电与异常校验码"
+    pov: "char_protagonist"
+    cast:
+      characters:
+        - "char_protagonist"
+      locations:
+        - "loc_starter_stage"
+      factions:
+        - "fac_main_org"
+      items:
+        - "item_key_token"
+    threads:
+      - thread_id: "thread_opening_mystery"
+        action: "plant"
+    unlock_secrets: []
+    topics:
+      - entity_id: "char_protagonist"
+        topic: "决断习惯"
+    forbidden:
+      - "严禁让主角提前猜出加密盘隐藏分区的真实来源"
+      - "严禁使用悬浮爽文式巧合直接化解初始危机"
+    beats:
+      - index: 1
+        title: "雨夜加班"
+        content: "陆沉在滨海高新区创研园的办公室复核最后一组数据，窗外暴雨敲打玻璃，手机突然亮起陌生提示。"
+      - index: 2
+        title: "异常信号"
+        content: "陆工取出加密银色移动盘接入测试终端，却发现启明项目组的旧备份校验记录出现一处多出来的凌晨时间戳。"
+      - index: 3
+        title: "定锚起航"
+        content: "陆沉合上笔记本决定暂不打草惊蛇，次日一早按原计划赴会，为全书主线埋下第一颗钉子。"
+    body: |
+      ## 本章创作提示
+      开篇直入具体情境与人物动作，用克制节奏建立悬念感与现场代入感。
+  world_state:
+    current_chapter: 0
+    in_world_time: "首章开篇·秋夜"
+    macro_situation: "项目窗口期刚刚开启，各方势力尚在暗中试探与观望阶段。"
+  active_characters:
+    char_protagonist:
+      updated_at_ch: 1
+      location: "loc_starter_stage"
+      physical_mental: "精力尚可但长期熬夜略显疲惫，精神高度专注"
+      current_goals:
+        - "确保启明项目组首轮验收顺利推进"
+        - "查明加密盘凌晨异常访问记录的来源"
+      epistemic_bounds:
+        knows:
+          - "启明项目组当前现金流与交付期限十分紧张"
+        unaware_of:
+          - "旧备份协议中存在被刻意隐藏的额外条款"
+        misbelieves:
+          - "暂以为异常时间戳只是机房例行同步留下的日志偏差"
+      profile_ext:
+        occupation: "技术负责人"
+        specialty: "系统架构与危机拆解"
+  active_factions:
+    fac_main_org:
+      updated_at_ch: 1
+      status: "active"
+      leader: null
+      territory:
+        - "loc_starter_stage"
+      current_goals:
+        - "打赢首个关键节点交付"
+      profile_ext: {}
+  relations:
+    - source: "char_protagonist"
+      target: "fac_main_org"
+      relation: "核心发起人与技术主心骨"
+      valid_from_ch: 1
+      invalid_at_ch: null
+  threads:
+    - id: "thread_opening_mystery"
+      title: "加密银色移动盘的异常凌晨访问记录"
+      category: "main_mystery"
+      status: "planted"
+      planted_at: 1
+      last_progressed_at: 1
+      expected_window: [1, 10]
+      trigger_entities:
+        - "char_protagonist"
+        - "item_key_token"
+      public_clue: "加密盘日志中多出一条未登记的凌晨校验记录。"
+      truth_secret: "该次校验系旧合作方内部人员借失效权限留下的定向追踪标记。"
+  style_guide:
+    tone: "冷峻写实、注重细节质感与人物专业度"
+    pov_rules:
+      - "严格维持单章第三人称有限视角（POV），不得越位透支未知信息。"
+      - "人物判断必须基于其当前已掌握线索与性格习惯。"
+    banned_words:
+      - "震惊全场"
+      - "邪魅一笑"
+      - "恐怖如斯"
+    style_note: "注重日常环境白描与职场对话分寸，减少形容词堆砌。"
+
+cultivation_rpg:
+  premise: "以境界秩序、宗门博弈与因果宿怨为核心，写实刻画主角于灵气潮汐与人心险恶中步步破境求存。"
+  settings:
+    - path: "01_settings/world/world_overview.md"
+      id: "world_overview"
+      name: "苍冥修真界"
+      aliases:
+        - "苍冥界"
+      category: "world"
+      status: "active"
+      tags:
+        - "修真"
+        - "世界观"
+      core_text: "灵脉分布极不均衡的修真天地，宗门与世家垄断上品灵矿与高阶功法，散修与外门弟子须凭战功或机缘换取破境资粮。"
+      topic_name: "境界与灵脉法则"
+      topic_text: "炼气、筑基、金丹、元婴四境森严，灵气稀薄之地强行冲击大境极易导致气海反噬。"
+      secret_text: "每隔三百年的天象异动实为上古大阵吸纳天地灵机的余波，而非单纯天灾。"
+    - path: "01_settings/geography/loc_starter_stage.md"
+      id: "loc_starter_stage"
+      name: "青岚山外门药庐"
+      aliases:
+        - "外门药庐"
+      category: "geography"
+      status: "active"
+      tags:
+        - "宗门地标"
+      core_text: "坐落于青岚宗东麓寒溪旁的石砌药庐，灵气虽属下品，胜在清静偏僻，四周种满耐寒的青霜草。"
+      topic_name: "后山古阵残迹"
+      topic_text: "药庐后崖半里处有一座早已被宗门废弃的残破聚灵阵台，月晦之夜偶有微弱灵纹闪动。"
+      secret_text: "残破阵台之下镇压着一枚与上古剑修传承相关的无主阵眼。"
+    - path: "01_settings/factions/fac_main_org.md"
+      id: "fac_main_org"
+      name: "青岚宗"
+      aliases:
+        - "青岚门"
+      category: "faction"
+      status: "active"
+      tags:
+        - "宗门"
+      core_text: "东域二流修真大宗，以剑丹双修立宗，内部分为执事、传功、丹器三脉，宗规森严却也暗藏派系倾轧。"
+      topic_name: "外门大比制度"
+      topic_text: "每三年举行一次外门小比，前十名可入内门秘阁择取一道中品筑基辅助功法。"
+      secret_text: "掌门一脉与执法堂长老之间因百年前秘境旧案早已面和心不合。"
+    - path: "01_settings/characters/char_protagonist.md"
+      id: "char_protagonist"
+      name: "顾青"
+      aliases:
+        - "顾师弟"
+      category: "character"
+      status: "active"
+      tags:
+        - "主角"
+        - "剑修"
+      core_text: "十七岁入青岚宗的外门杂役弟子，性情内敛坚韧，擅长看火候与辨识灵草药性，暗中勤修基础吐纳与拔剑式。"
+      topic_name: "战斗与藏拙习惯"
+      topic_text: "与人交手前习惯先留三分真气护住心脉，不到生死关头绝不显露压箱底身法。"
+      secret_text: "顾青幼年随身携带的残缺木牌实为上古剑宗接引信物，能够隐约共鸣纯正剑意。"
+    - path: "01_settings/items/item_key_token.md"
+      id: "item_key_token"
+      name: "裂纹玄铁令牌"
+      aliases:
+        - "玄铁令牌"
+      category: "item"
+      status: "active"
+      tags:
+        - "法宝"
+        - "信物"
+      core_text: "巴掌大小、边缘缺了一角的暗沉玄铁牌，入手微凉，表面蚀刻着难以辨认的古篆云纹。"
+      topic_name: "灵气共鸣特性"
+      topic_text: "遇高纯度剑气或寒属性灵材时会泛起一丝微不可察的青光，平日与凡铁无异。"
+      secret_text: "令牌缺口对应着青岚宗祖师密室残图的三分之一拼合印记。"
+  volume:
+    id: "vol_01"
+    title: "微末起青萍"
+    chapter_range: [1, 30]
+    core_conflict: "主角须在宗门倾轧与资源匮乏下稳步筑基，解开残缺玄铁令牌牵引出的第一重传承秘密。"
+    body: |
+      ## 卷级起承转合
+      - **第 1～10 章**：外门立身，凭谨小慎微与古牌异动度过首次危机。
+      - **第 11～20 章**：外门大比风波起，与世家子弟交锋并入山历练。
+      - **第 21～30 章**：秘境突围破境筑基，初露峥嵘却也引来暗中窥伺。
+  arc:
+    id: "vol_01_arc_01"
+    volume_id: "vol_01"
+    title: "药庐微光"
+    chapter_range: [1, 10]
+    body: |
+      ## 单元核心看点
+      夯实修仙体系日常感、资源获取逻辑与玄铁令牌首次异动的悬念张力。
+  blueprint:
+    chapter: 1
+    volume_id: "vol_01"
+    arc_id: "vol_01_arc_01"
+    title: "寒溪采露与铁牌生温"
+    pov: "char_protagonist"
+    cast:
+      characters:
+        - "char_protagonist"
+      locations:
+        - "loc_starter_stage"
+      factions:
+        - "fac_main_org"
+      items:
+        - "item_key_token"
+    threads:
+      - thread_id: "thread_opening_mystery"
+        action: "plant"
+    unlock_secrets: []
+    topics:
+      - entity_id: "char_protagonist"
+        topic: "战斗与藏拙习惯"
+    forbidden:
+      - "严禁开篇直接写出玄铁令牌与祖师密室的关联"
+      - "严禁越级秒杀高阶修士，严格遵守境界战力压制"
+    beats:
+      - index: 1
+        title: "寅时采药"
+        content: "顾青趁晨露未散在青岚山外门药庐后坡采集青霜草，顺手演练三遍基础吐纳稳固炼气三层气海。"
+      - index: 2
+        title: "铁牌异动"
+        content: "顾师弟路过残破阵台石隙时，贴身收着的裂纹玄铁令牌忽然微热一颤，随即便重归沉寂。"
+      - index: 3
+        title: "敛息归庐"
+        content: "顾青按捺好奇未贸然翻动乱石，记下方位后返回青岚宗药庐交差，暗自戒备起近期外门异象。"
+    body: |
+      ## 本章创作提示
+      着力描写修真日常的清苦与秩序感，突出主角谨慎藏拙的处事分寸。
+  world_state:
+    current_chapter: 0
+    in_world_time: "太初历四百一十二年·深秋寅时"
+    macro_situation: "东域表面风平浪静，青岚宗三年一度的外门小比临近，各脉暗中物色苗子。"
+  active_characters:
+    char_protagonist:
+      updated_at_ch: 1
+      location: "loc_starter_stage"
+      physical_mental: "气海稳固在炼气三层，外门杂务繁重但心神沉静警觉"
+      current_goals:
+        - "攒够灵石换取一枚固元丹冲击炼气四层"
+        - "弄清玄铁令牌在残阵前发热的缘由"
+      epistemic_bounds:
+        knows:
+          - "青岚宗外门小比将在三个月后举行"
+        unaware_of:
+          - "执法堂已有内门执事注意到后山残阵近期灵机波动"
+        misbelieves:
+          - "以为玄铁令牌只是家传的一块普通古旧护身铁牌"
+      profile_ext:
+        realm: "炼气三层"
+        techniques:
+          - "青岚基础吐纳诀"
+          - "流云拔剑式"
+        key_items:
+          - "裂纹玄铁令牌"
+        trump_cards:
+          - "藏拙多年的瞬发敛息术"
+  active_factions:
+    fac_main_org:
+      updated_at_ch: 1
+      status: "active"
+      leader: null
+      territory:
+        - "loc_starter_stage"
+      current_goals:
+        - "筹备外门小比并清查东麓古阵残迹"
+      profile_ext: {}
+  relations:
+    - source: "char_protagonist"
+      target: "fac_main_org"
+      relation: "青岚宗外门药庐记名弟子"
+      valid_from_ch: 1
+      invalid_at_ch: null
+  threads:
+    - id: "thread_opening_mystery"
+      title: "裂纹玄铁令牌与后山废弃阵台共鸣"
+      category: "treasure_origin"
+      status: "planted"
+      planted_at: 1
+      last_progressed_at: 1
+      expected_window: [1, 10]
+      trigger_entities:
+        - "char_protagonist"
+        - "item_key_token"
+      public_clue: "玄铁令牌靠近东麓残破聚灵阵台时会短暂发热。"
+      truth_secret: "令牌系青岚宗创派剑脉遗留信物，阵台下封存着残缺剑意玉简。"
+  style_guide:
+    tone: "古雅克制、重境界逻辑与世情冷暖"
+    pov_rules:
+      - "严格维持单章 POV 视角，主角未知的宗门高层博弈严禁提前在旁白剧透。"
+      - "斗法描写注重灵力消耗、地形制约与招式破绽。"
+    banned_words:
+      - "恐怖如斯"
+      - "倒吸一口凉气"
+      - "天骄震颤"
+    style_note: "以草木灵气、符箓纸灰、山风寒意烘托修仙世界质感。"
+
+mystery_intrigue:
+  premise: "围绕多层伪装、情报甄别与时间线推理，在暗流涌动的迷局中层层剥茧。"
+  settings:
+    - path: "01_settings/world/world_overview.md"
+      id: "world_overview"
+      name: "民国雾城情报暗战网"
+      aliases:
+        - "雾城暗局"
+      category: "world"
+      status: "active"
+      tags:
+        - "悬疑"
+        - "谍战"
+      core_text: "多方势力盘踞的滨江商埠雾城，表面租界林立、报馆茶楼熙攘，实则密码电台、特派密探与黑市中间人交错纵横。"
+      topic_name: "单线联络铁律"
+      topic_text: "地下情报节点彼此互不知晓真实身份，全部依靠预设暗号、报刊夹缝广告与死信箱传递消息。"
+      secret_text: "雾城水路转运站内其实还潜伏着一条未被任何一方备案的第三方独立线。"
+    - path: "01_settings/geography/loc_starter_stage.md"
+      id: "loc_starter_stage"
+      name: "钟楼街老邮局"
+      aliases:
+        - "老邮局"
+      category: "geography"
+      status: "active"
+      tags:
+        - "联络点"
+      core_text: "位于旧城区与码头交界的灰砖三层邮局，门口铜钟每天正午敲响，一楼汇兑窗口终年人流不断。"
+      topic_name: "二楼分拣室死角"
+      topic_text: "楼梯转角百叶窗正对对面咖啡馆二楼卡座，适合在取信同时观察街头盯梢动向。"
+      secret_text: "地下储藏室第三排铁皮信箱暗格可直通后巷排水涵道。"
+    - path: "01_settings/factions/fac_main_org.md"
+      id: "fac_main_org"
+      name: "雾城特别调查科"
+      aliases:
+        - "特别调查科"
+      category: "faction"
+      status: "active"
+      tags:
+        - "核心机构"
+      core_text: "名义上负责商埠稽查与走私案件侦办的半公开部门，实则汇聚了各方安插的耳目与精明强干的调查员。"
+      topic_name: "档案调阅审批"
+      topic_text: "凡涉密卷宗均须科长与值班文书双签方能出库，且每次调阅均会在火漆登记簿留痕。"
+      secret_text: "调查科档案室半年前一场微不足道的小火，实为有人刻意销毁一份边境通行证存根。"
+    - path: "01_settings/characters/char_protagonist.md"
+      id: "char_protagonist"
+      name: "沈砚"
+      aliases:
+        - "沈科员"
+      category: "character"
+      status: "active"
+      tags:
+        - "主角"
+        - "侦探"
+      core_text: "二十八岁，雾城特别调查科三组档案核查员。总是将袖口扣得一丝不苟，习惯用钢笔在烟盒背面速记在场人物的细节矛盾。"
+      topic_name: "反侦察复盘法"
+      topic_text: "每次会面结束后，沈砚会默数三步观察玻璃橱窗倒影，借以确认身后是否存在交叉尾随。"
+      secret_text: "沈砚暗中保管着失踪兄长留下的半页加密译码本，入职调查科只为顺藤摸瓜找出当晚真相。"
+    - path: "01_settings/items/item_key_token.md"
+      id: "item_key_token"
+      name: "黄铜停表"
+      aliases:
+        - "老式停表"
+      category: "item"
+      status: "active"
+      tags:
+        - "线索"
+        - "证物"
+      core_text: "表盖内侧刻有模糊罗马数字的旧式黄铜机械停表，指针停在三点十七分的位置再未走动。"
+      topic_name: "表壳暗扣机关"
+      topic_text: "逆时针轻旋发条半圈再按压表冠，可弹开双层底盖取出夹层微缩纸条。"
+      secret_text: "表盖内侧划痕实际对应雾城码头第三号货栈的保险箱序列。"
+  volume:
+    id: "vol_01"
+    title: "迷雾钟声"
+    chapter_range: [1, 30]
+    core_conflict: "主角须在多方试探与假情报干扰下守住自身暗桩身份，查出涉密证物背后的内鬼网络。"
+    body: |
+      ## 卷级起承转合
+      - **第 1～10 章**：停表证物现身，主角开始逐一排查特别调查科内部可疑时间线。
+      - **第 11～20 章**：伪装马甲险些暴露，借反间计反向锁定关键中间人。
+      - **第 21～30 章**：钟楼暴雨夜收网对峙，拔出第一枚暗桩却牵出更大幕后棋手。
+  arc:
+    id: "vol_01_arc_01"
+    volume_id: "vol_01"
+    title: "三点十七分"
+    chapter_range: [1, 10]
+    body: |
+      ## 单元核心看点
+      强化信息差博弈、物证细节推理与人物表面寒暄下的心理暗战。
+  blueprint:
+    chapter: 1
+    volume_id: "vol_01"
+    arc_id: "vol_01_arc_01"
+    title: "失物招领箱里的停表"
+    pov: "char_protagonist"
+    cast:
+      characters:
+        - "char_protagonist"
+      locations:
+        - "loc_starter_stage"
+      factions:
+        - "fac_main_org"
+      items:
+        - "item_key_token"
+    threads:
+      - thread_id: "thread_opening_mystery"
+        action: "plant"
+    unlock_secrets: []
+    topics:
+      - entity_id: "char_protagonist"
+        topic: "反侦察复盘法"
+    forbidden:
+      - "严禁让主角在未查证前直接断定调查科内鬼是谁"
+      - "严禁破坏角色认知隔离写穿其他人物的隐藏动机"
+    beats:
+      - index: 1
+        title: "雾雨取件"
+        content: "沈砚踏着湿滑青石板走入钟楼街老邮局，依规核对编号后签收了一只没有寄件人姓名的牛皮纸小包。"
+      - index: 2
+        title: "停表疑点"
+        content: "回到雾城特别调查科的僻静隔间，沈科员拆封取出停在三点十七分的黄铜停表，记下这一异常证物线索。"
+      - index: 3
+        title: "无声试探"
+        content: "沈砚察觉走廊外脚步停顿半拍，神色不动地将老式停表锁入抽屉，随即端起茶杯迎出门口。"
+    body: |
+      ## 本章创作提示
+      重在冷冽悬疑氛围与细节草蛇灰线，人物对话留白克制，忌直接点破底牌。
+  world_state:
+    current_chapter: 0
+    in_world_time: "雾历二十六年·深秋微雨午后"
+    macro_situation: "各方情报网表面恪守默契，实则因一份即将启用的密电新规而暗自绷紧神经。"
+  active_characters:
+    char_protagonist:
+      updated_at_ch: 1
+      location: "loc_starter_stage"
+      physical_mental: "外表从容寡言，实则感官敏锐、对周围异常动静保持高度戒备"
+      current_goals:
+        - "核查黄铜停表的来源与寄送邮戳"
+        - "稳住调查科内部人际关系避免提前暴露"
+      epistemic_bounds:
+        knows:
+          - "黄铜停表指针停在三点十七分"
+        unaware_of:
+          - "寄出包裹的线人此刻已悄然转移至码头货栈"
+        misbelieves:
+          - "暂以为邮包只是一桩普通走私旧案的匿名举报物证"
+      profile_ext:
+        disguises:
+          - identity: "雾城特别调查科三组档案核查员"
+            known_by: []
+        clues_held:
+          - id: "clue_opening_01"
+            content: "没有寄件人署名的黄铜停表，指针停在三点十七分"
+            found_at_ch: 1
+            points_to:
+              - "fac_main_org"
+        suspicions:
+          - "包裹邮戳时间与值班登记表存在半小时偏差，科内可能有人经手过"
+  active_factions:
+    fac_main_org:
+      updated_at_ch: 1
+      status: "active"
+      leader: null
+      territory:
+        - "loc_starter_stage"
+      current_goals:
+        - "追查近半月商埠匿名泄密渠道"
+      profile_ext: {}
+  relations:
+    - source: "char_protagonist"
+      target: "fac_main_org"
+      relation: "在编三组档案核查员"
+      valid_from_ch: 1
+      invalid_at_ch: null
+  threads:
+    - id: "thread_opening_mystery"
+      title: "匿名寄来的三点十七分黄铜停表"
+      category: "clue_chain"
+      status: "planted"
+      planted_at: 1
+      last_progressed_at: 1
+      expected_window: [1, 10]
+      trigger_entities:
+        - "char_protagonist"
+        - "item_key_token"
+      public_clue: "老邮局转交来的无名包裹内只有一只停走的黄铜停表。"
+      truth_secret: "停表内夹层藏有揭露半年前档案室纵火内鬼的保险箱编号。"
+  style_guide:
+    tone: "冷峻悬疑、讲究时间线咬合与微表情留白"
+    pov_rules:
+      - "严格维持单章 POV 视角，严禁提前揭露未查明的马甲与幕后意图。"
+      - "每条线索的出现与推理须有物理凭据或合理观察支撑。"
+    banned_words:
+      - "嘴角勾起一抹弧度"
+      - "一切尽在掌握"
+      - "眼神骤然一凛"
+    style_note: "善用钟表滴答、雨衣水渍、纸张折痕与茶水冷暖营造心理压迫感。"

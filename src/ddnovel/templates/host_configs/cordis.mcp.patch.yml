@@ -1,0 +1,12 @@
+# DDNovelGenerater MCP patch for DeepSeek Harness (DSH / Cordis)
+- insert:
+    - id: mcp-ddnovel
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: ddnovel
+        transport: stdio
+        command: ddnovel-mcp
+        args: []
+        cwd: "."
+        env:
+          DDNOVEL_BOOK_DIR: "."

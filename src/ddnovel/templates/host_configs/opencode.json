@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ddnovel": {
+      "type": "local",
+      "command": [
+        "ddnovel-mcp"
+      ],
+      "environment": {
+        "DDNOVEL_BOOK_DIR": "."
+      },
+      "enabled": true
+    }
+  }
+}
