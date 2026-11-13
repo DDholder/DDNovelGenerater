@@ -77,13 +77,18 @@ flowchart TB
 ```mermaid
 classDiagram
     class NovelConfig {
+        +int schema_version = 1
         +str title
+        +str author
         +str genre_profile
         +int current_chapter
+        +int chapter_id_width = 4
         +TokenBudgetConfig budget
         +LifecycleConfig lifecycle
         +EmbeddingConfig embedding
+        +list~HostKind~ hosts
         +load(book_dir) NovelConfig
+        +dump(book_dir) Path
     }
 
     class ProgressiveParser {
@@ -172,7 +177,7 @@ erDiagram
     ENTITIES {
         text id PK "如 char_linfan / loc_beijing"
         text name "主名称"
-        text category "world / rule / geography / faction / character"
+        text category "world / rule / geography / faction / character / item / other"
         text status "active / deceased / retired"
         int is_archived "0=热池参与嗅探, 1=冷库冻结"
         int updated_at_ch "最后更新章号"
@@ -201,7 +206,7 @@ erDiagram
         text target_id FK "终点实体ID"
         text relation "关系描述"
         int valid_from_ch "生效起始章号"
-        int invalid_at_ch "失效章号 (NULL代表当前仍有效)"
+        int invalid_at_ch "失效章号 (左闭右开, NULL代表当前仍有效)"
     }
 
     THREADS {
@@ -221,8 +226,8 @@ erDiagram
     CHAPTER_FACTS {
         int ch PK "章号"
         text volume_id "所属卷ID"
-        text arc_id "所属单元ID"
-        text in_world_time "书内时间坐标"
+        text arc_id "所属单元ID (JSONL别名 arc)"
+        text in_world_time "书内时间坐标 (JSONL别名 time)"
         text summary "单章百字摘要"
         text facts_json "3~5条原子事实数组"
         text entities_json "本章涉及实体ID数组"

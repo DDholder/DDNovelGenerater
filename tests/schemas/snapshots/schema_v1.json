@@ -1,0 +1,3838 @@
+{
+  "models": {
+    "ArcDoc": {
+      "$defs": {
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": true,
+      "description": "剧情单元文档模型（`02_structure/arcs/vol_XX_arc_YY.md`）。",
+      "properties": {
+        "body": {
+          "default": "",
+          "title": "Body",
+          "type": "string"
+        },
+        "chapter_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/_ChapterWindowTuple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "folded_summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Folded Summary"
+        },
+        "id": {
+          "pattern": "^vol_\\d{2,}_arc_\\d{2,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "volume_id": {
+          "anyOf": [
+            {
+              "pattern": "^vol_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Id"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ArcDoc",
+      "type": "object"
+    },
+    "AuditIssue": {
+      "$defs": {
+        "IssueLevel": {
+          "description": "一致性体检（audit）问题严重级别。",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "IssueLevel",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "一致性体检单条问题项（T11 产出）。",
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/IssueLevel"
+        },
+        "location": {
+          "default": "",
+          "title": "Location",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "code",
+        "message"
+      ],
+      "title": "AuditIssue",
+      "type": "object"
+    },
+    "AuditReport": {
+      "$defs": {
+        "AuditIssue": {
+          "additionalProperties": false,
+          "description": "一致性体检单条问题项（T11 产出）。",
+          "properties": {
+            "code": {
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            },
+            "level": {
+              "$ref": "#/$defs/IssueLevel"
+            },
+            "location": {
+              "default": "",
+              "title": "Location",
+              "type": "string"
+            },
+            "message": {
+              "minLength": 1,
+              "title": "Message",
+              "type": "string"
+            }
+          },
+          "required": [
+            "level",
+            "code",
+            "message"
+          ],
+          "title": "AuditIssue",
+          "type": "object"
+        },
+        "IssueLevel": {
+          "description": "一致性体检（audit）问题严重级别。",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "IssueLevel",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "单章或全书静态一致性体检报告（T11 产出）。",
+      "properties": {
+        "chapter": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chapter"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/AuditIssue"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "passed": {
+          "default": true,
+          "title": "Passed",
+          "type": "boolean"
+        }
+      },
+      "title": "AuditReport",
+      "type": "object"
+    },
+    "Beat": {
+      "additionalProperties": true,
+      "description": "章节蓝图分场节拍。",
+      "properties": {
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "Beat",
+      "type": "object"
+    },
+    "BlueprintCast": {
+      "additionalProperties": true,
+      "description": "章节蓝图登场与涉及实体清单。",
+      "properties": {
+        "characters": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Characters",
+          "type": "array"
+        },
+        "factions": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Factions",
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "locations": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Locations",
+          "type": "array"
+        }
+      },
+      "title": "BlueprintCast",
+      "type": "object"
+    },
+    "BlueprintDoc": {
+      "$defs": {
+        "Beat": {
+          "additionalProperties": true,
+          "description": "章节蓝图分场节拍。",
+          "properties": {
+            "content": {
+              "default": "",
+              "title": "Content",
+              "type": "string"
+            },
+            "index": {
+              "minimum": 1,
+              "title": "Index",
+              "type": "integer"
+            },
+            "title": {
+              "default": "",
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "index"
+          ],
+          "title": "Beat",
+          "type": "object"
+        },
+        "BlueprintCast": {
+          "additionalProperties": true,
+          "description": "章节蓝图登场与涉及实体清单。",
+          "properties": {
+            "characters": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Characters",
+              "type": "array"
+            },
+            "factions": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Factions",
+              "type": "array"
+            },
+            "items": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "locations": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Locations",
+              "type": "array"
+            }
+          },
+          "title": "BlueprintCast",
+          "type": "object"
+        },
+        "ThreadAction": {
+          "description": "章节蓝图中对指定伏笔执行的动作。",
+          "enum": [
+            "plant",
+            "progress",
+            "resolve"
+          ],
+          "title": "ThreadAction",
+          "type": "string"
+        },
+        "ThreadRef": {
+          "additionalProperties": true,
+          "description": "章节蓝图中对指定伏笔/悬线的动作引用。",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/ThreadAction"
+            },
+            "thread_id": {
+              "pattern": "^thread_[a-z0-9_]+$",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "thread_id",
+            "action"
+          ],
+          "title": "ThreadRef",
+          "type": "object"
+        },
+        "TopicRef": {
+          "additionalProperties": true,
+          "description": "章节蓝图中按需挂载的实体专题切片引用。",
+          "properties": {
+            "entity_id": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Entity Id",
+              "type": "string"
+            },
+            "topic": {
+              "minLength": 1,
+              "title": "Topic",
+              "type": "string"
+            }
+          },
+          "required": [
+            "entity_id",
+            "topic"
+          ],
+          "title": "TopicRef",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "description": "单章写作蓝图文档模型（`02_structure/blueprints/vol_XX/ch_XXXX.md`）。",
+      "properties": {
+        "arc_id": {
+          "anyOf": [
+            {
+              "pattern": "^vol_\\d{2,}_arc_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arc Id"
+        },
+        "beats": {
+          "items": {
+            "$ref": "#/$defs/Beat"
+          },
+          "title": "Beats",
+          "type": "array"
+        },
+        "body": {
+          "default": "",
+          "title": "Body",
+          "type": "string"
+        },
+        "cast": {
+          "$ref": "#/$defs/BlueprintCast"
+        },
+        "chapter": {
+          "minimum": 1,
+          "title": "Chapter",
+          "type": "integer"
+        },
+        "forbidden": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbidden",
+          "type": "array"
+        },
+        "pov": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pov"
+        },
+        "threads": {
+          "items": {
+            "$ref": "#/$defs/ThreadRef"
+          },
+          "title": "Threads",
+          "type": "array"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "topics": {
+          "items": {
+            "$ref": "#/$defs/TopicRef"
+          },
+          "title": "Topics",
+          "type": "array"
+        },
+        "unlock_secrets": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Unlock Secrets",
+          "type": "array"
+        },
+        "volume_id": {
+          "anyOf": [
+            {
+              "pattern": "^vol_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Id"
+        }
+      },
+      "required": [
+        "chapter"
+      ],
+      "title": "BlueprintDoc",
+      "type": "object"
+    },
+    "ChapterFactRecord": {
+      "additionalProperties": true,
+      "description": "单章历史摘要与原子事实锚点（`03_state/history/vol_XX_facts.jsonl` 每行记录）。",
+      "properties": {
+        "arc": {
+          "anyOf": [
+            {
+              "pattern": "^vol_\\d{2,}_arc_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arc"
+        },
+        "ch": {
+          "minimum": 1,
+          "title": "Ch",
+          "type": "integer"
+        },
+        "entities": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Entities",
+          "type": "array"
+        },
+        "facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "summary": {
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time"
+        },
+        "volume_id": {
+          "anyOf": [
+            {
+              "pattern": "^vol_\\d{2,}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Id"
+        }
+      },
+      "required": [
+        "ch",
+        "summary",
+        "facts"
+      ],
+      "title": "ChapterFactRecord",
+      "type": "object"
+    },
+    "CharacterState": {
+      "$defs": {
+        "EpistemicBounds": {
+          "additionalProperties": true,
+          "description": "角色认知边界三元组（防全知视角剧透红线）。",
+          "properties": {
+            "knows": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Knows",
+              "type": "array"
+            },
+            "misbelieves": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Misbelieves",
+              "type": "array"
+            },
+            "unaware_of": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Unaware Of",
+              "type": "array"
+            }
+          },
+          "title": "EpistemicBounds",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "description": "单个角色的当前动态状态截面（`03_state/{active,archive}/characters.yaml` 值模型）。",
+      "properties": {
+        "current_goals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Current Goals",
+          "type": "array"
+        },
+        "epistemic_bounds": {
+          "$ref": "#/$defs/EpistemicBounds"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "physical_mental": {
+          "default": "",
+          "title": "Physical Mental",
+          "type": "string"
+        },
+        "profile_ext": {
+          "additionalProperties": true,
+          "title": "Profile Ext",
+          "type": "object"
+        },
+        "updated_at_ch": {
+          "minimum": 1,
+          "title": "Updated At Ch",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated_at_ch"
+      ],
+      "title": "CharacterState",
+      "type": "object"
+    },
+    "CharacterStateFile": {
+      "$defs": {
+        "CharacterState": {
+          "additionalProperties": true,
+          "description": "单个角色的当前动态状态截面（`03_state/{active,archive}/characters.yaml` 值模型）。",
+          "properties": {
+            "current_goals": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Current Goals",
+              "type": "array"
+            },
+            "epistemic_bounds": {
+              "$ref": "#/$defs/EpistemicBounds"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Location"
+            },
+            "physical_mental": {
+              "default": "",
+              "title": "Physical Mental",
+              "type": "string"
+            },
+            "profile_ext": {
+              "additionalProperties": true,
+              "title": "Profile Ext",
+              "type": "object"
+            },
+            "updated_at_ch": {
+              "minimum": 1,
+              "title": "Updated At Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "updated_at_ch"
+          ],
+          "title": "CharacterState",
+          "type": "object"
+        },
+        "EpistemicBounds": {
+          "additionalProperties": true,
+          "description": "角色认知边界三元组（防全知视角剧透红线）。",
+          "properties": {
+            "knows": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Knows",
+              "type": "array"
+            },
+            "misbelieves": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Misbelieves",
+              "type": "array"
+            },
+            "unaware_of": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Unaware Of",
+              "type": "array"
+            }
+          },
+          "title": "EpistemicBounds",
+          "type": "object"
+        }
+      },
+      "description": "角色状态截面映射文件容器（`03_state/{active,archive}/characters.yaml`）。",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*_[a-z0-9_]+$": {
+          "$ref": "#/$defs/CharacterState"
+        }
+      },
+      "title": "CharacterStateFile",
+      "type": "object"
+    },
+    "Clue": {
+      "additionalProperties": true,
+      "description": "悬疑/谍战线索证据。",
+      "properties": {
+        "content": {
+          "description": "线索内容描述",
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "found_at_ch": {
+          "description": "发现线索的章号",
+          "minimum": 1,
+          "title": "Found At Ch",
+          "type": "integer"
+        },
+        "id": {
+          "description": "线索标识",
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "points_to": {
+          "description": "指向的嫌疑实体 ID 列表",
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Points To",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "content",
+        "found_at_ch"
+      ],
+      "title": "Clue",
+      "type": "object"
+    },
+    "CompactResult": {
+      "additionalProperties": false,
+      "description": "远期完结卷原子事实蒸馏浓缩结果（T11 产出）。",
+      "properties": {
+        "compacted_count": {
+          "minimum": 0,
+          "title": "Compacted Count",
+          "type": "integer"
+        },
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "history_path": {
+          "minLength": 1,
+          "title": "History Path",
+          "type": "string"
+        },
+        "original_count": {
+          "minimum": 0,
+          "title": "Original Count",
+          "type": "integer"
+        },
+        "volume_id": {
+          "pattern": "^vol_\\d{2,}$",
+          "title": "Volume Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "volume_id",
+        "history_path",
+        "original_count",
+        "compacted_count"
+      ],
+      "title": "CompactResult",
+      "type": "object"
+    },
+    "CultivationRpgExt": {
+      "additionalProperties": true,
+      "description": "修仙/玄幻RPG 题材扩展模型。",
+      "properties": {
+        "key_items": {
+          "description": "关键法宝/道具",
+          "items": {
+            "type": "string"
+          },
+          "title": "Key Items",
+          "type": "array"
+        },
+        "realm": {
+          "default": "",
+          "description": "当前修为境界，如'筑基后期'",
+          "title": "Realm",
+          "type": "string"
+        },
+        "techniques": {
+          "description": "掌握功法/神通列表",
+          "items": {
+            "type": "string"
+          },
+          "title": "Techniques",
+          "type": "array"
+        },
+        "trump_cards": {
+          "description": "保命底牌/大招",
+          "items": {
+            "type": "string"
+          },
+          "title": "Trump Cards",
+          "type": "array"
+        }
+      },
+      "title": "CultivationRpgExt",
+      "type": "object"
+    },
+    "Disguise": {
+      "additionalProperties": true,
+      "description": "悬疑/谍战伪装马甲。",
+      "properties": {
+        "identity": {
+          "description": "伪装身份名称",
+          "minLength": 1,
+          "title": "Identity",
+          "type": "string"
+        },
+        "known_by": {
+          "description": "已知晓该伪装的实体 ID 列表",
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Known By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "identity"
+      ],
+      "title": "Disguise",
+      "type": "object"
+    },
+    "DropResult": {
+      "$defs": {
+        "ImpactHit": {
+          "additionalProperties": false,
+          "description": "设定影响面扫描单条命中记录（T10 产出）。",
+          "properties": {
+            "chapter_num": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Num"
+            },
+            "excerpt": {
+              "default": "",
+              "title": "Excerpt",
+              "type": "string"
+            },
+            "location": {
+              "minLength": 1,
+              "title": "Location",
+              "type": "string"
+            },
+            "matched_term": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Term"
+            },
+            "scope": {
+              "$ref": "#/$defs/ImpactScope"
+            }
+          },
+          "required": [
+            "scope",
+            "location"
+          ],
+          "title": "ImpactHit",
+          "type": "object"
+        },
+        "ImpactScope": {
+          "description": "防吃书影响面扫描命中的五维作用域。",
+          "enum": [
+            "manuscript",
+            "fact",
+            "state",
+            "thread",
+            "blueprint"
+          ],
+          "title": "ImpactScope",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "主动弃坑伏笔物理移除结果（T11 产出）。",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "prior_mentions": {
+          "items": {
+            "$ref": "#/$defs/ImpactHit"
+          },
+          "title": "Prior Mentions",
+          "type": "array"
+        },
+        "removed_from": {
+          "minLength": 1,
+          "title": "Removed From",
+          "type": "string"
+        },
+        "thread_id": {
+          "pattern": "^thread_[a-z0-9_]+$",
+          "title": "Thread Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "thread_id",
+        "removed_from"
+      ],
+      "title": "DropResult",
+      "type": "object"
+    },
+    "EmbeddingConfig": {
+      "additionalProperties": false,
+      "description": "可选向量检索插件配置（默认关闭，绝不落盘明文密钥）。",
+      "properties": {
+        "api_key_env": {
+          "default": "",
+          "description": "存放 API Key 的环境变量名（严禁直接填写明文密钥）",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "dim": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "向量维度（启用时必填正整数）",
+          "title": "Dim"
+        },
+        "enabled": {
+          "default": false,
+          "description": "是否启用向量语义检索插件",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model": {
+          "default": "",
+          "description": "Embedding 模型名称",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "default": "",
+          "description": "向量模型服务提供方标识",
+          "title": "Provider",
+          "type": "string"
+        },
+        "rrf_k": {
+          "default": 60,
+          "description": "RRF 混合检索融合常数 k",
+          "minimum": 1,
+          "title": "Rrf K",
+          "type": "integer"
+        }
+      },
+      "title": "EmbeddingConfig",
+      "type": "object"
+    },
+    "EntityBundle": {
+      "$defs": {
+        "CharacterState": {
+          "additionalProperties": true,
+          "description": "单个角色的当前动态状态截面（`03_state/{active,archive}/characters.yaml` 值模型）。",
+          "properties": {
+            "current_goals": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Current Goals",
+              "type": "array"
+            },
+            "epistemic_bounds": {
+              "$ref": "#/$defs/EpistemicBounds"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Location"
+            },
+            "physical_mental": {
+              "default": "",
+              "title": "Physical Mental",
+              "type": "string"
+            },
+            "profile_ext": {
+              "additionalProperties": true,
+              "title": "Profile Ext",
+              "type": "object"
+            },
+            "updated_at_ch": {
+              "minimum": 1,
+              "title": "Updated At Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "updated_at_ch"
+          ],
+          "title": "CharacterState",
+          "type": "object"
+        },
+        "EntityStatus": {
+          "description": "设定实体/势力生命周期状态（势力覆灭统一归入 retired）。",
+          "enum": [
+            "active",
+            "deceased",
+            "retired"
+          ],
+          "title": "EntityStatus",
+          "type": "string"
+        },
+        "EpistemicBounds": {
+          "additionalProperties": true,
+          "description": "角色认知边界三元组（防全知视角剧透红线）。",
+          "properties": {
+            "knows": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Knows",
+              "type": "array"
+            },
+            "misbelieves": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Misbelieves",
+              "type": "array"
+            },
+            "unaware_of": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Unaware Of",
+              "type": "array"
+            }
+          },
+          "title": "EpistemicBounds",
+          "type": "object"
+        },
+        "FactionState": {
+          "additionalProperties": true,
+          "description": "单个势力/组织的当前动态状态截面（`03_state/{active,archive}/factions.yaml` 值模型）。",
+          "properties": {
+            "current_goals": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Current Goals",
+              "type": "array"
+            },
+            "leader": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Leader"
+            },
+            "profile_ext": {
+              "additionalProperties": true,
+              "title": "Profile Ext",
+              "type": "object"
+            },
+            "status": {
+              "$ref": "#/$defs/EntityStatus",
+              "default": "active"
+            },
+            "territory": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Territory",
+              "type": "array"
+            },
+            "updated_at_ch": {
+              "minimum": 1,
+              "title": "Updated At Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "updated_at_ch"
+          ],
+          "title": "FactionState",
+          "type": "object"
+        },
+        "SettingCategory": {
+          "description": "设定实体分类。",
+          "enum": [
+            "world",
+            "rule",
+            "geography",
+            "faction",
+            "character",
+            "item",
+            "other"
+          ],
+          "title": "SettingCategory",
+          "type": "string"
+        },
+        "SettingDoc": {
+          "additionalProperties": true,
+          "description": "设定文档完整解析模型（L1），包含核心设定、按需专题与机密底牌三级切片。",
+          "properties": {
+            "aliases": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Aliases",
+              "type": "array"
+            },
+            "category": {
+              "$ref": "#/$defs/SettingCategory"
+            },
+            "core_text": {
+              "default": "",
+              "title": "Core Text",
+              "type": "string"
+            },
+            "file_path": {
+              "minLength": 1,
+              "title": "File Path",
+              "type": "string"
+            },
+            "id": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Id",
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "secret_text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Secret Text"
+            },
+            "status": {
+              "$ref": "#/$defs/EntityStatus",
+              "default": "active"
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Tags",
+              "type": "array"
+            },
+            "topics": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Topics",
+              "type": "object"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "category",
+            "file_path"
+          ],
+          "title": "SettingDoc",
+          "type": "object"
+        },
+        "TemporalRelation": {
+          "additionalProperties": true,
+          "description": "双时态实体关系边（左闭右开生效区间 ``[valid_from_ch, invalid_at_ch)``）。",
+          "properties": {
+            "invalid_at_ch": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Invalid At Ch"
+            },
+            "relation": {
+              "minLength": 1,
+              "title": "Relation",
+              "type": "string"
+            },
+            "source": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Source",
+              "type": "string"
+            },
+            "target": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Target",
+              "type": "string"
+            },
+            "valid_from_ch": {
+              "minimum": 1,
+              "title": "Valid From Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "source",
+            "target",
+            "relation",
+            "valid_from_ch"
+          ],
+          "title": "TemporalRelation",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "单个实体的设定切片、当前截面状态与有效关系聚合包（T06 产出）。",
+      "properties": {
+        "is_archived": {
+          "default": false,
+          "title": "Is Archived",
+          "type": "boolean"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/TemporalRelation"
+          },
+          "title": "Relations",
+          "type": "array"
+        },
+        "setting": {
+          "$ref": "#/$defs/SettingDoc"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CharacterState"
+            },
+            {
+              "$ref": "#/$defs/FactionState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        }
+      },
+      "required": [
+        "setting"
+      ],
+      "title": "EntityBundle",
+      "type": "object"
+    },
+    "EpistemicBounds": {
+      "additionalProperties": true,
+      "description": "角色认知边界三元组（防全知视角剧透红线）。",
+      "properties": {
+        "knows": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Knows",
+          "type": "array"
+        },
+        "misbelieves": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Misbelieves",
+          "type": "array"
+        },
+        "unaware_of": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unaware Of",
+          "type": "array"
+        }
+      },
+      "title": "EpistemicBounds",
+      "type": "object"
+    },
+    "FactionState": {
+      "$defs": {
+        "EntityStatus": {
+          "description": "设定实体/势力生命周期状态（势力覆灭统一归入 retired）。",
+          "enum": [
+            "active",
+            "deceased",
+            "retired"
+          ],
+          "title": "EntityStatus",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "description": "单个势力/组织的当前动态状态截面（`03_state/{active,archive}/factions.yaml` 值模型）。",
+      "properties": {
+        "current_goals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Current Goals",
+          "type": "array"
+        },
+        "leader": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Leader"
+        },
+        "profile_ext": {
+          "additionalProperties": true,
+          "title": "Profile Ext",
+          "type": "object"
+        },
+        "status": {
+          "$ref": "#/$defs/EntityStatus",
+          "default": "active"
+        },
+        "territory": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Territory",
+          "type": "array"
+        },
+        "updated_at_ch": {
+          "minimum": 1,
+          "title": "Updated At Ch",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated_at_ch"
+      ],
+      "title": "FactionState",
+      "type": "object"
+    },
+    "FactionStateFile": {
+      "$defs": {
+        "EntityStatus": {
+          "description": "设定实体/势力生命周期状态（势力覆灭统一归入 retired）。",
+          "enum": [
+            "active",
+            "deceased",
+            "retired"
+          ],
+          "title": "EntityStatus",
+          "type": "string"
+        },
+        "FactionState": {
+          "additionalProperties": true,
+          "description": "单个势力/组织的当前动态状态截面（`03_state/{active,archive}/factions.yaml` 值模型）。",
+          "properties": {
+            "current_goals": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Current Goals",
+              "type": "array"
+            },
+            "leader": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Leader"
+            },
+            "profile_ext": {
+              "additionalProperties": true,
+              "title": "Profile Ext",
+              "type": "object"
+            },
+            "status": {
+              "$ref": "#/$defs/EntityStatus",
+              "default": "active"
+            },
+            "territory": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Territory",
+              "type": "array"
+            },
+            "updated_at_ch": {
+              "minimum": 1,
+              "title": "Updated At Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "updated_at_ch"
+          ],
+          "title": "FactionState",
+          "type": "object"
+        }
+      },
+      "description": "势力状态截面映射文件容器（`03_state/{active,archive}/factions.yaml`）。",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*_[a-z0-9_]+$": {
+          "$ref": "#/$defs/FactionState"
+        }
+      },
+      "title": "FactionStateFile",
+      "type": "object"
+    },
+    "GCReport": {
+      "additionalProperties": false,
+      "description": "退场实体、失效关系与已回收伏笔冷归档报告（T11 产出）。",
+      "properties": {
+        "archived_characters": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Archived Characters",
+          "type": "array"
+        },
+        "archived_factions": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Archived Factions",
+          "type": "array"
+        },
+        "archived_relations_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Archived Relations Count",
+          "type": "integer"
+        },
+        "archived_threads": {
+          "items": {
+            "pattern": "^thread_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Archived Threads",
+          "type": "array"
+        },
+        "current_chapter": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Current Chapter",
+          "type": "integer"
+        },
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "modified_paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Modified Paths",
+          "type": "array"
+        }
+      },
+      "title": "GCReport",
+      "type": "object"
+    },
+    "GeneralExt": {
+      "additionalProperties": true,
+      "description": "通用都市/现实等无特定限制题材扩展模型。",
+      "properties": {},
+      "title": "GeneralExt",
+      "type": "object"
+    },
+    "ImpactHit": {
+      "$defs": {
+        "ImpactScope": {
+          "description": "防吃书影响面扫描命中的五维作用域。",
+          "enum": [
+            "manuscript",
+            "fact",
+            "state",
+            "thread",
+            "blueprint"
+          ],
+          "title": "ImpactScope",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "设定影响面扫描单条命中记录（T10 产出）。",
+      "properties": {
+        "chapter_num": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chapter Num"
+        },
+        "excerpt": {
+          "default": "",
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "location": {
+          "minLength": 1,
+          "title": "Location",
+          "type": "string"
+        },
+        "matched_term": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Matched Term"
+        },
+        "scope": {
+          "$ref": "#/$defs/ImpactScope"
+        }
+      },
+      "required": [
+        "scope",
+        "location"
+      ],
+      "title": "ImpactHit",
+      "type": "object"
+    },
+    "ImpactReport": {
+      "$defs": {
+        "ImpactHit": {
+          "additionalProperties": false,
+          "description": "设定影响面扫描单条命中记录（T10 产出）。",
+          "properties": {
+            "chapter_num": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Chapter Num"
+            },
+            "excerpt": {
+              "default": "",
+              "title": "Excerpt",
+              "type": "string"
+            },
+            "location": {
+              "minLength": 1,
+              "title": "Location",
+              "type": "string"
+            },
+            "matched_term": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Matched Term"
+            },
+            "scope": {
+              "$ref": "#/$defs/ImpactScope"
+            }
+          },
+          "required": [
+            "scope",
+            "location"
+          ],
+          "title": "ImpactHit",
+          "type": "object"
+        },
+        "ImpactScope": {
+          "description": "防吃书影响面扫描命中的五维作用域。",
+          "enum": [
+            "manuscript",
+            "fact",
+            "state",
+            "thread",
+            "blueprint"
+          ],
+          "title": "ImpactScope",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "中途改设定五维防吃书影响面扫描报告（T10 产出）。",
+      "properties": {
+        "entity_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Id"
+        },
+        "expanded_terms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Expanded Terms",
+          "type": "array"
+        },
+        "hits": {
+          "items": {
+            "$ref": "#/$defs/ImpactHit"
+          },
+          "title": "Hits",
+          "type": "array"
+        },
+        "is_safe_to_change": {
+          "default": true,
+          "title": "Is Safe To Change",
+          "type": "boolean"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "ImpactReport",
+      "type": "object"
+    },
+    "LifecycleConfig": {
+      "additionalProperties": false,
+      "description": "状态生命周期、冷热归档与卷末浓缩阈值配置。",
+      "properties": {
+        "cold_after_chapters": {
+          "default": 40,
+          "description": "实体连续未出场超过该章数后归入冷库候选",
+          "minimum": 1,
+          "title": "Cold After Chapters",
+          "type": "integer"
+        },
+        "compact_max_milestones": {
+          "default": 20,
+          "description": "分卷浓缩里程碑最大条数",
+          "minimum": 1,
+          "title": "Compact Max Milestones",
+          "type": "integer"
+        },
+        "compact_min_milestones": {
+          "default": 15,
+          "description": "分卷浓缩里程碑最小条数",
+          "minimum": 1,
+          "title": "Compact Min Milestones",
+          "type": "integer"
+        },
+        "stale_thread_chapters": {
+          "default": 20,
+          "description": "伏笔连续未推进超过该章数后触发断线预警",
+          "minimum": 1,
+          "title": "Stale Thread Chapters",
+          "type": "integer"
+        },
+        "ttl_keep_chapters": {
+          "default": 5,
+          "description": "临时缓存产物（如写作包）保留的最近章数",
+          "minimum": 0,
+          "title": "Ttl Keep Chapters",
+          "type": "integer"
+        }
+      },
+      "title": "LifecycleConfig",
+      "type": "object"
+    },
+    "MatchedEntity": {
+      "additionalProperties": false,
+      "description": "Aho-Corasick 实体别名自动机单次命中结果（T04 产出）。",
+      "properties": {
+        "alias": {
+          "minLength": 1,
+          "title": "Alias",
+          "type": "string"
+        },
+        "end": {
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "entity_id": {
+          "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "is_archived": {
+          "default": false,
+          "title": "Is Archived",
+          "type": "boolean"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entity_id",
+        "alias",
+        "start",
+        "end"
+      ],
+      "title": "MatchedEntity",
+      "type": "object"
+    },
+    "MysteryIntrigueExt": {
+      "$defs": {
+        "Clue": {
+          "additionalProperties": true,
+          "description": "悬疑/谍战线索证据。",
+          "properties": {
+            "content": {
+              "description": "线索内容描述",
+              "minLength": 1,
+              "title": "Content",
+              "type": "string"
+            },
+            "found_at_ch": {
+              "description": "发现线索的章号",
+              "minimum": 1,
+              "title": "Found At Ch",
+              "type": "integer"
+            },
+            "id": {
+              "description": "线索标识",
+              "minLength": 1,
+              "title": "Id",
+              "type": "string"
+            },
+            "points_to": {
+              "description": "指向的嫌疑实体 ID 列表",
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Points To",
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "content",
+            "found_at_ch"
+          ],
+          "title": "Clue",
+          "type": "object"
+        },
+        "Disguise": {
+          "additionalProperties": true,
+          "description": "悬疑/谍战伪装马甲。",
+          "properties": {
+            "identity": {
+              "description": "伪装身份名称",
+              "minLength": 1,
+              "title": "Identity",
+              "type": "string"
+            },
+            "known_by": {
+              "description": "已知晓该伪装的实体 ID 列表",
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Known By",
+              "type": "array"
+            }
+          },
+          "required": [
+            "identity"
+          ],
+          "title": "Disguise",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "description": "悬疑/谍战/谋略 题材扩展模型。",
+      "properties": {
+        "clues_held": {
+          "description": "当前掌握的线索证据",
+          "items": {
+            "$ref": "#/$defs/Clue"
+          },
+          "title": "Clues Held",
+          "type": "array"
+        },
+        "disguises": {
+          "description": "当前马甲/伪装身份列表",
+          "items": {
+            "$ref": "#/$defs/Disguise"
+          },
+          "title": "Disguises",
+          "type": "array"
+        },
+        "suspicions": {
+          "description": "当前怀疑推论列表",
+          "items": {
+            "type": "string"
+          },
+          "title": "Suspicions",
+          "type": "array"
+        }
+      },
+      "title": "MysteryIntrigueExt",
+      "type": "object"
+    },
+    "NovelConfig": {
+      "$defs": {
+        "EmbeddingConfig": {
+          "additionalProperties": false,
+          "description": "可选向量检索插件配置（默认关闭，绝不落盘明文密钥）。",
+          "properties": {
+            "api_key_env": {
+              "default": "",
+              "description": "存放 API Key 的环境变量名（严禁直接填写明文密钥）",
+              "title": "Api Key Env",
+              "type": "string"
+            },
+            "dim": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "向量维度（启用时必填正整数）",
+              "title": "Dim"
+            },
+            "enabled": {
+              "default": false,
+              "description": "是否启用向量语义检索插件",
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "model": {
+              "default": "",
+              "description": "Embedding 模型名称",
+              "title": "Model",
+              "type": "string"
+            },
+            "provider": {
+              "default": "",
+              "description": "向量模型服务提供方标识",
+              "title": "Provider",
+              "type": "string"
+            },
+            "rrf_k": {
+              "default": 60,
+              "description": "RRF 混合检索融合常数 k",
+              "minimum": 1,
+              "title": "Rrf K",
+              "type": "integer"
+            }
+          },
+          "title": "EmbeddingConfig",
+          "type": "object"
+        },
+        "HostKind": {
+          "description": "支持的 AI 软件宿主类型。",
+          "enum": [
+            "opencode",
+            "dsh",
+            "claude"
+          ],
+          "title": "HostKind",
+          "type": "string"
+        },
+        "LifecycleConfig": {
+          "additionalProperties": false,
+          "description": "状态生命周期、冷热归档与卷末浓缩阈值配置。",
+          "properties": {
+            "cold_after_chapters": {
+              "default": 40,
+              "description": "实体连续未出场超过该章数后归入冷库候选",
+              "minimum": 1,
+              "title": "Cold After Chapters",
+              "type": "integer"
+            },
+            "compact_max_milestones": {
+              "default": 20,
+              "description": "分卷浓缩里程碑最大条数",
+              "minimum": 1,
+              "title": "Compact Max Milestones",
+              "type": "integer"
+            },
+            "compact_min_milestones": {
+              "default": 15,
+              "description": "分卷浓缩里程碑最小条数",
+              "minimum": 1,
+              "title": "Compact Min Milestones",
+              "type": "integer"
+            },
+            "stale_thread_chapters": {
+              "default": 20,
+              "description": "伏笔连续未推进超过该章数后触发断线预警",
+              "minimum": 1,
+              "title": "Stale Thread Chapters",
+              "type": "integer"
+            },
+            "ttl_keep_chapters": {
+              "default": 5,
+              "description": "临时缓存产物（如写作包）保留的最近章数",
+              "minimum": 0,
+              "title": "Ttl Keep Chapters",
+              "type": "integer"
+            }
+          },
+          "title": "LifecycleConfig",
+          "type": "object"
+        },
+        "SlotBudget": {
+          "additionalProperties": false,
+          "description": "写作上下文包（Context Packet）五槽位 Token 预算分配。",
+          "properties": {
+            "beats": {
+              "default": 1800,
+              "description": "槽位 5：本章蓝图与分场节拍预算",
+              "minimum": 0,
+              "title": "Beats",
+              "type": "integer"
+            },
+            "continuity": {
+              "default": 2000,
+              "description": "槽位 4：上章尾部切片与连续性摘要预算",
+              "minimum": 0,
+              "title": "Continuity",
+              "type": "integer"
+            },
+            "entities": {
+              "default": 2500,
+              "description": "槽位 3：出场实体设定与当前截面预算",
+              "minimum": 0,
+              "title": "Entities",
+              "type": "integer"
+            },
+            "guardrails": {
+              "default": 1200,
+              "description": "槽位 1：文风红线与防剧透守则预算",
+              "minimum": 0,
+              "title": "Guardrails",
+              "type": "integer"
+            },
+            "world_and_facts": {
+              "default": 2200,
+              "description": "槽位 2：世界观与近期历史事实预算",
+              "minimum": 0,
+              "title": "World And Facts",
+              "type": "integer"
+            }
+          },
+          "title": "SlotBudget",
+          "type": "object"
+        },
+        "TokenBudgetConfig": {
+          "additionalProperties": false,
+          "description": "全局 Token 预算与溢出裁剪策略配置。",
+          "properties": {
+            "recent_summary_count": {
+              "default": 3,
+              "description": "注入近期章节摘要的章数",
+              "minimum": 0,
+              "title": "Recent Summary Count",
+              "type": "integer"
+            },
+            "slots": {
+              "$ref": "#/$defs/SlotBudget",
+              "description": "五槽位各自预算分配"
+            },
+            "tail_excerpt_max_chars": {
+              "default": 1200,
+              "description": "上一章尾部原文摘录最大字符数",
+              "minimum": 1,
+              "title": "Tail Excerpt Max Chars",
+              "type": "integer"
+            },
+            "tail_excerpt_min_chars": {
+              "default": 800,
+              "description": "上一章尾部原文摘录最小字符数",
+              "minimum": 0,
+              "title": "Tail Excerpt Min Chars",
+              "type": "integer"
+            },
+            "total": {
+              "default": 10000,
+              "description": "单章写作包总 Token 预算上限",
+              "minimum": 1,
+              "title": "Total",
+              "type": "integer"
+            },
+            "trim_order": {
+              "description": "超预算时的裁剪优先级顺序（仅允许中间三槽，首尾槽位永不可裁）",
+              "items": {
+                "type": "string"
+              },
+              "title": "Trim Order",
+              "type": "array"
+            }
+          },
+          "title": "TokenBudgetConfig",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "单本书籍真源根目录 `novel.yaml` 顶层配置模型。",
+      "properties": {
+        "author": {
+          "default": "",
+          "description": "作者署名",
+          "title": "Author",
+          "type": "string"
+        },
+        "budget": {
+          "$ref": "#/$defs/TokenBudgetConfig",
+          "description": "Token 预算配置"
+        },
+        "chapter_id_width": {
+          "default": 4,
+          "description": "章节文件编号零填充宽度",
+          "minimum": 1,
+          "title": "Chapter Id Width",
+          "type": "integer"
+        },
+        "current_chapter": {
+          "default": 0,
+          "description": "当前已定稿最新章号（0 表示尚未开篇）",
+          "minimum": 0,
+          "title": "Current Chapter",
+          "type": "integer"
+        },
+        "embedding": {
+          "$ref": "#/$defs/EmbeddingConfig",
+          "description": "可选向量检索配置"
+        },
+        "genre_profile": {
+          "default": "general",
+          "description": "题材扩展配置标识",
+          "title": "Genre Profile",
+          "type": "string"
+        },
+        "hosts": {
+          "description": "目标 AI 宿主环境列表（自动去重保序）",
+          "items": {
+            "$ref": "#/$defs/HostKind"
+          },
+          "title": "Hosts",
+          "type": "array"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/LifecycleConfig",
+          "description": "生命周期阈值配置"
+        },
+        "schema_version": {
+          "default": 1,
+          "description": "Schema 契约版本号",
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "title": {
+          "description": "作品标题",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "NovelConfig",
+      "type": "object"
+    },
+    "PacketBuildResult": {
+      "$defs": {
+        "SlotName": {
+          "description": "单章写作包 U 型五槽位标准名称。",
+          "enum": [
+            "guardrails",
+            "world_and_facts",
+            "entities",
+            "continuity",
+            "beats"
+          ],
+          "title": "SlotName",
+          "type": "string"
+        },
+        "SlotReport": {
+          "additionalProperties": false,
+          "description": "单章写作包单个槽位的 Token 预算与裁剪报告（T08 产出）。",
+          "properties": {
+            "budget": {
+              "minimum": 0,
+              "title": "Budget",
+              "type": "integer"
+            },
+            "dropped_items": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Dropped Items",
+              "type": "array"
+            },
+            "name": {
+              "$ref": "#/$defs/SlotName"
+            },
+            "trimmed": {
+              "default": false,
+              "title": "Trimmed",
+              "type": "boolean"
+            },
+            "used": {
+              "minimum": 0,
+              "title": "Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "budget",
+            "used"
+          ],
+          "title": "SlotReport",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "单章写作包一步直出编译结果（T08 产出）。",
+      "properties": {
+        "blocked_secrets": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Blocked Secrets",
+          "type": "array"
+        },
+        "blocked_threads": {
+          "items": {
+            "pattern": "^thread_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Blocked Threads",
+          "type": "array"
+        },
+        "budget_total": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Budget Total"
+        },
+        "chapter": {
+          "minimum": 1,
+          "title": "Chapter",
+          "type": "integer"
+        },
+        "packet_path": {
+          "minLength": 1,
+          "title": "Packet Path",
+          "type": "string"
+        },
+        "slots": {
+          "items": {
+            "$ref": "#/$defs/SlotReport"
+          },
+          "title": "Slots",
+          "type": "array"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "chapter",
+        "packet_path",
+        "total_tokens"
+      ],
+      "title": "PacketBuildResult",
+      "type": "object"
+    },
+    "ParsedBlocks": {
+      "additionalProperties": false,
+      "description": "设定文档渐进式三级切片与 Token 估算结果（T03 产出）。",
+      "properties": {
+        "core": {
+          "default": "",
+          "title": "Core",
+          "type": "string"
+        },
+        "secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret"
+        },
+        "token_estimates": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": "Token Estimates",
+          "type": "object"
+        },
+        "topics": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Topics",
+          "type": "object"
+        }
+      },
+      "title": "ParsedBlocks",
+      "type": "object"
+    },
+    "PromoteResult": {
+      "additionalProperties": false,
+      "description": "单章定稿归档与超期过程产物清理结果（T11 产出）。",
+      "properties": {
+        "chapter": {
+          "minimum": 1,
+          "title": "Chapter",
+          "type": "integer"
+        },
+        "cleaned_paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Cleaned Paths",
+          "type": "array"
+        },
+        "draft_path": {
+          "minLength": 1,
+          "title": "Draft Path",
+          "type": "string"
+        },
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "manuscript_path": {
+          "minLength": 1,
+          "title": "Manuscript Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chapter",
+        "draft_path",
+        "manuscript_path"
+      ],
+      "title": "PromoteResult",
+      "type": "object"
+    },
+    "PruneReport": {
+      "additionalProperties": false,
+      "description": "孤儿废案与一次性龙套卡片物理剪枝报告（T11 产出）。",
+      "properties": {
+        "deleted_paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Deleted Paths",
+          "type": "array"
+        },
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "low_frequency_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Low Frequency Ids",
+          "type": "array"
+        },
+        "orphan_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Orphan Ids",
+          "type": "array"
+        },
+        "skipped_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Skipped Ids",
+          "type": "array"
+        }
+      },
+      "title": "PruneReport",
+      "type": "object"
+    },
+    "RadarHit": {
+      "$defs": {
+        "RadarReason": {
+          "description": "伏笔雷达告警触发原因。",
+          "enum": [
+            "window",
+            "stale",
+            "entity"
+          ],
+          "title": "RadarReason",
+          "type": "string"
+        },
+        "Thread": {
+          "additionalProperties": true,
+          "description": "悬线与事件伏笔台账条目（`03_state/threads.yaml` 列表项）。",
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Category"
+            },
+            "expected_window": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/_ChapterWindowTuple"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "id": {
+              "pattern": "^thread_[a-z0-9_]+$",
+              "title": "Id",
+              "type": "string"
+            },
+            "last_progressed_at": {
+              "minimum": 1,
+              "title": "Last Progressed At",
+              "type": "integer"
+            },
+            "planted_at": {
+              "minimum": 1,
+              "title": "Planted At",
+              "type": "integer"
+            },
+            "public_clue": {
+              "default": "",
+              "title": "Public Clue",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/ThreadStatus",
+              "default": "planted"
+            },
+            "title": {
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "trigger_entities": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Trigger Entities",
+              "type": "array"
+            },
+            "truth_secret": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Truth Secret"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "planted_at",
+            "last_progressed_at"
+          ],
+          "title": "Thread",
+          "type": "object"
+        },
+        "ThreadStatus": {
+          "description": "悬线与事件伏笔四态枚举（主动弃坑为物理移除，不设 dropped 状态）。",
+          "enum": [
+            "planted",
+            "dormant",
+            "active",
+            "resolved"
+          ],
+          "title": "ThreadStatus",
+          "type": "string"
+        },
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "description": "伏笔巡检雷达单条命中条目（T09 产出）。",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/RadarReason"
+          },
+          "minItems": 1,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "thread": {
+          "$ref": "#/$defs/Thread"
+        }
+      },
+      "required": [
+        "thread",
+        "reasons"
+      ],
+      "title": "RadarHit",
+      "type": "object"
+    },
+    "RadarReport": {
+      "$defs": {
+        "RadarHit": {
+          "additionalProperties": false,
+          "description": "伏笔巡检雷达单条命中条目（T09 产出）。",
+          "properties": {
+            "detail": {
+              "default": "",
+              "title": "Detail",
+              "type": "string"
+            },
+            "reasons": {
+              "items": {
+                "$ref": "#/$defs/RadarReason"
+              },
+              "minItems": 1,
+              "title": "Reasons",
+              "type": "array"
+            },
+            "thread": {
+              "$ref": "#/$defs/Thread"
+            }
+          },
+          "required": [
+            "thread",
+            "reasons"
+          ],
+          "title": "RadarHit",
+          "type": "object"
+        },
+        "RadarReason": {
+          "description": "伏笔雷达告警触发原因。",
+          "enum": [
+            "window",
+            "stale",
+            "entity"
+          ],
+          "title": "RadarReason",
+          "type": "string"
+        },
+        "Thread": {
+          "additionalProperties": true,
+          "description": "悬线与事件伏笔台账条目（`03_state/threads.yaml` 列表项）。",
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Category"
+            },
+            "expected_window": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/_ChapterWindowTuple"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "id": {
+              "pattern": "^thread_[a-z0-9_]+$",
+              "title": "Id",
+              "type": "string"
+            },
+            "last_progressed_at": {
+              "minimum": 1,
+              "title": "Last Progressed At",
+              "type": "integer"
+            },
+            "planted_at": {
+              "minimum": 1,
+              "title": "Planted At",
+              "type": "integer"
+            },
+            "public_clue": {
+              "default": "",
+              "title": "Public Clue",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/ThreadStatus",
+              "default": "planted"
+            },
+            "title": {
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "trigger_entities": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Trigger Entities",
+              "type": "array"
+            },
+            "truth_secret": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Truth Secret"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "planted_at",
+            "last_progressed_at"
+          ],
+          "title": "Thread",
+          "type": "object"
+        },
+        "ThreadStatus": {
+          "description": "悬线与事件伏笔四态枚举（主动弃坑为物理移除，不设 dropped 状态）。",
+          "enum": [
+            "planted",
+            "dormant",
+            "active",
+            "resolved"
+          ],
+          "title": "ThreadStatus",
+          "type": "string"
+        },
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "description": "规划期悬线伏笔雷达完整巡检报告（T09 产出）。",
+      "properties": {
+        "hits": {
+          "items": {
+            "$ref": "#/$defs/RadarHit"
+          },
+          "title": "Hits",
+          "type": "array"
+        },
+        "planned_entities": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Planned Entities",
+          "type": "array"
+        },
+        "target_chapter": {
+          "minimum": 1,
+          "title": "Target Chapter",
+          "type": "integer"
+        },
+        "total_active_threads": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total Active Threads",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "target_chapter"
+      ],
+      "title": "RadarReport",
+      "type": "object"
+    },
+    "RelationsFile": {
+      "$defs": {
+        "TemporalRelation": {
+          "additionalProperties": true,
+          "description": "双时态实体关系边（左闭右开生效区间 ``[valid_from_ch, invalid_at_ch)``）。",
+          "properties": {
+            "invalid_at_ch": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Invalid At Ch"
+            },
+            "relation": {
+              "minLength": 1,
+              "title": "Relation",
+              "type": "string"
+            },
+            "source": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Source",
+              "type": "string"
+            },
+            "target": {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "title": "Target",
+              "type": "string"
+            },
+            "valid_from_ch": {
+              "minimum": 1,
+              "title": "Valid From Ch",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "source",
+            "target",
+            "relation",
+            "valid_from_ch"
+          ],
+          "title": "TemporalRelation",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "description": "双时态实体关系文件容器（`03_state/relations.yaml` 及 `archive/relations.yaml`）。",
+      "properties": {
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/TemporalRelation"
+          },
+          "title": "Relations",
+          "type": "array"
+        }
+      },
+      "title": "RelationsFile",
+      "type": "object"
+    },
+    "SearchHit": {
+      "$defs": {
+        "FtsScope": {
+          "description": "FTS5 全文检索切片作用域。",
+          "enum": [
+            "setting",
+            "fact",
+            "summary",
+            "manuscript",
+            "blueprint"
+          ],
+          "title": "FtsScope",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "FTS5 / 向量混合检索单条命中结果（T06 / T07 产出）。",
+      "properties": {
+        "chapter_num": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chapter Num",
+          "type": "integer"
+        },
+        "doc_id": {
+          "minLength": 1,
+          "title": "Doc Id",
+          "type": "string"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Id"
+        },
+        "excerpt": {
+          "default": "",
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/FtsScope"
+        },
+        "score": {
+          "default": 0.0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "doc_id",
+        "scope"
+      ],
+      "title": "SearchHit",
+      "type": "object"
+    },
+    "SettingDoc": {
+      "$defs": {
+        "EntityStatus": {
+          "description": "设定实体/势力生命周期状态（势力覆灭统一归入 retired）。",
+          "enum": [
+            "active",
+            "deceased",
+            "retired"
+          ],
+          "title": "EntityStatus",
+          "type": "string"
+        },
+        "SettingCategory": {
+          "description": "设定实体分类。",
+          "enum": [
+            "world",
+            "rule",
+            "geography",
+            "faction",
+            "character",
+            "item",
+            "other"
+          ],
+          "title": "SettingCategory",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "description": "设定文档完整解析模型（L1），包含核心设定、按需专题与机密底牌三级切片。",
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "category": {
+          "$ref": "#/$defs/SettingCategory"
+        },
+        "core_text": {
+          "default": "",
+          "title": "Core Text",
+          "type": "string"
+        },
+        "file_path": {
+          "minLength": 1,
+          "title": "File Path",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "secret_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secret Text"
+        },
+        "status": {
+          "$ref": "#/$defs/EntityStatus",
+          "default": "active"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "topics": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Topics",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "file_path"
+      ],
+      "title": "SettingDoc",
+      "type": "object"
+    },
+    "SettingFrontmatter": {
+      "$defs": {
+        "EntityStatus": {
+          "description": "设定实体/势力生命周期状态（势力覆灭统一归入 retired）。",
+          "enum": [
+            "active",
+            "deceased",
+            "retired"
+          ],
+          "title": "EntityStatus",
+          "type": "string"
+        },
+        "SettingCategory": {
+          "description": "设定实体分类。",
+          "enum": [
+            "world",
+            "rule",
+            "geography",
+            "faction",
+            "character",
+            "item",
+            "other"
+          ],
+          "title": "SettingCategory",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "description": "设定文档 YAML Frontmatter 宽容模型（L0）。\n\n全部字段可选，允许空字典加载及保留未知自定义字段，缺失核心元信息由 T03 解析器按路径推断回填。",
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SettingCategory"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "status": {
+          "$ref": "#/$defs/EntityStatus",
+          "default": "active"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "SettingFrontmatter",
+      "type": "object"
+    },
+    "SlotBudget": {
+      "additionalProperties": false,
+      "description": "写作上下文包（Context Packet）五槽位 Token 预算分配。",
+      "properties": {
+        "beats": {
+          "default": 1800,
+          "description": "槽位 5：本章蓝图与分场节拍预算",
+          "minimum": 0,
+          "title": "Beats",
+          "type": "integer"
+        },
+        "continuity": {
+          "default": 2000,
+          "description": "槽位 4：上章尾部切片与连续性摘要预算",
+          "minimum": 0,
+          "title": "Continuity",
+          "type": "integer"
+        },
+        "entities": {
+          "default": 2500,
+          "description": "槽位 3：出场实体设定与当前截面预算",
+          "minimum": 0,
+          "title": "Entities",
+          "type": "integer"
+        },
+        "guardrails": {
+          "default": 1200,
+          "description": "槽位 1：文风红线与防剧透守则预算",
+          "minimum": 0,
+          "title": "Guardrails",
+          "type": "integer"
+        },
+        "world_and_facts": {
+          "default": 2200,
+          "description": "槽位 2：世界观与近期历史事实预算",
+          "minimum": 0,
+          "title": "World And Facts",
+          "type": "integer"
+        }
+      },
+      "title": "SlotBudget",
+      "type": "object"
+    },
+    "SlotReport": {
+      "$defs": {
+        "SlotName": {
+          "description": "单章写作包 U 型五槽位标准名称。",
+          "enum": [
+            "guardrails",
+            "world_and_facts",
+            "entities",
+            "continuity",
+            "beats"
+          ],
+          "title": "SlotName",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "单章写作包单个槽位的 Token 预算与裁剪报告（T08 产出）。",
+      "properties": {
+        "budget": {
+          "minimum": 0,
+          "title": "Budget",
+          "type": "integer"
+        },
+        "dropped_items": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dropped Items",
+          "type": "array"
+        },
+        "name": {
+          "$ref": "#/$defs/SlotName"
+        },
+        "trimmed": {
+          "default": false,
+          "title": "Trimmed",
+          "type": "boolean"
+        },
+        "used": {
+          "minimum": 0,
+          "title": "Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "budget",
+        "used"
+      ],
+      "title": "SlotReport",
+      "type": "object"
+    },
+    "StyleGuide": {
+      "additionalProperties": true,
+      "description": "文风与红线指南模型（`04_creation/style_guide.md`）。",
+      "properties": {
+        "banned_words": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Banned Words",
+          "type": "array"
+        },
+        "pov_rules": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pov Rules",
+          "type": "array"
+        },
+        "raw_markdown": {
+          "default": "",
+          "title": "Raw Markdown",
+          "type": "string"
+        },
+        "tone": {
+          "default": "",
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "title": "StyleGuide",
+      "type": "object"
+    },
+    "SyncReport": {
+      "additionalProperties": false,
+      "description": "SQLite 派生索引增量同步或全量重建报告（T06 产出）。",
+      "properties": {
+        "added": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Added",
+          "type": "array"
+        },
+        "deleted": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Deleted",
+          "type": "array"
+        },
+        "elapsed_ms": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Elapsed Ms",
+          "type": "number"
+        },
+        "rebuilt": {
+          "default": false,
+          "title": "Rebuilt",
+          "type": "boolean"
+        },
+        "updated": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Updated",
+          "type": "array"
+        }
+      },
+      "title": "SyncReport",
+      "type": "object"
+    },
+    "TemporalRelation": {
+      "additionalProperties": true,
+      "description": "双时态实体关系边（左闭右开生效区间 ``[valid_from_ch, invalid_at_ch)``）。",
+      "properties": {
+        "invalid_at_ch": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Invalid At Ch"
+        },
+        "relation": {
+          "minLength": 1,
+          "title": "Relation",
+          "type": "string"
+        },
+        "source": {
+          "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+          "title": "Target",
+          "type": "string"
+        },
+        "valid_from_ch": {
+          "minimum": 1,
+          "title": "Valid From Ch",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "relation",
+        "valid_from_ch"
+      ],
+      "title": "TemporalRelation",
+      "type": "object"
+    },
+    "Thread": {
+      "$defs": {
+        "ThreadStatus": {
+          "description": "悬线与事件伏笔四态枚举（主动弃坑为物理移除，不设 dropped 状态）。",
+          "enum": [
+            "planted",
+            "dormant",
+            "active",
+            "resolved"
+          ],
+          "title": "ThreadStatus",
+          "type": "string"
+        },
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": true,
+      "description": "悬线与事件伏笔台账条目（`03_state/threads.yaml` 列表项）。",
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "expected_window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/_ChapterWindowTuple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "pattern": "^thread_[a-z0-9_]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "last_progressed_at": {
+          "minimum": 1,
+          "title": "Last Progressed At",
+          "type": "integer"
+        },
+        "planted_at": {
+          "minimum": 1,
+          "title": "Planted At",
+          "type": "integer"
+        },
+        "public_clue": {
+          "default": "",
+          "title": "Public Clue",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ThreadStatus",
+          "default": "planted"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "trigger_entities": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "title": "Trigger Entities",
+          "type": "array"
+        },
+        "truth_secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Truth Secret"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "planted_at",
+        "last_progressed_at"
+      ],
+      "title": "Thread",
+      "type": "object"
+    },
+    "ThreadRef": {
+      "$defs": {
+        "ThreadAction": {
+          "description": "章节蓝图中对指定伏笔执行的动作。",
+          "enum": [
+            "plant",
+            "progress",
+            "resolve"
+          ],
+          "title": "ThreadAction",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "description": "章节蓝图中对指定伏笔/悬线的动作引用。",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ThreadAction"
+        },
+        "thread_id": {
+          "pattern": "^thread_[a-z0-9_]+$",
+          "title": "Thread Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "thread_id",
+        "action"
+      ],
+      "title": "ThreadRef",
+      "type": "object"
+    },
+    "ThreadsFile": {
+      "$defs": {
+        "Thread": {
+          "additionalProperties": true,
+          "description": "悬线与事件伏笔台账条目（`03_state/threads.yaml` 列表项）。",
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Category"
+            },
+            "expected_window": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/_ChapterWindowTuple"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "id": {
+              "pattern": "^thread_[a-z0-9_]+$",
+              "title": "Id",
+              "type": "string"
+            },
+            "last_progressed_at": {
+              "minimum": 1,
+              "title": "Last Progressed At",
+              "type": "integer"
+            },
+            "planted_at": {
+              "minimum": 1,
+              "title": "Planted At",
+              "type": "integer"
+            },
+            "public_clue": {
+              "default": "",
+              "title": "Public Clue",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/ThreadStatus",
+              "default": "planted"
+            },
+            "title": {
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "trigger_entities": {
+              "items": {
+                "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "title": "Trigger Entities",
+              "type": "array"
+            },
+            "truth_secret": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Truth Secret"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "planted_at",
+            "last_progressed_at"
+          ],
+          "title": "Thread",
+          "type": "object"
+        },
+        "ThreadStatus": {
+          "description": "悬线与事件伏笔四态枚举（主动弃坑为物理移除，不设 dropped 状态）。",
+          "enum": [
+            "planted",
+            "dormant",
+            "active",
+            "resolved"
+          ],
+          "title": "ThreadStatus",
+          "type": "string"
+        },
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": true,
+      "description": "悬线与事件伏笔台账文件容器（`03_state/threads.yaml` 及 `archive/threads.yaml`）。",
+      "properties": {
+        "threads": {
+          "items": {
+            "$ref": "#/$defs/Thread"
+          },
+          "title": "Threads",
+          "type": "array"
+        }
+      },
+      "title": "ThreadsFile",
+      "type": "object"
+    },
+    "TokenBudgetConfig": {
+      "$defs": {
+        "SlotBudget": {
+          "additionalProperties": false,
+          "description": "写作上下文包（Context Packet）五槽位 Token 预算分配。",
+          "properties": {
+            "beats": {
+              "default": 1800,
+              "description": "槽位 5：本章蓝图与分场节拍预算",
+              "minimum": 0,
+              "title": "Beats",
+              "type": "integer"
+            },
+            "continuity": {
+              "default": 2000,
+              "description": "槽位 4：上章尾部切片与连续性摘要预算",
+              "minimum": 0,
+              "title": "Continuity",
+              "type": "integer"
+            },
+            "entities": {
+              "default": 2500,
+              "description": "槽位 3：出场实体设定与当前截面预算",
+              "minimum": 0,
+              "title": "Entities",
+              "type": "integer"
+            },
+            "guardrails": {
+              "default": 1200,
+              "description": "槽位 1：文风红线与防剧透守则预算",
+              "minimum": 0,
+              "title": "Guardrails",
+              "type": "integer"
+            },
+            "world_and_facts": {
+              "default": 2200,
+              "description": "槽位 2：世界观与近期历史事实预算",
+              "minimum": 0,
+              "title": "World And Facts",
+              "type": "integer"
+            }
+          },
+          "title": "SlotBudget",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "全局 Token 预算与溢出裁剪策略配置。",
+      "properties": {
+        "recent_summary_count": {
+          "default": 3,
+          "description": "注入近期章节摘要的章数",
+          "minimum": 0,
+          "title": "Recent Summary Count",
+          "type": "integer"
+        },
+        "slots": {
+          "$ref": "#/$defs/SlotBudget",
+          "description": "五槽位各自预算分配"
+        },
+        "tail_excerpt_max_chars": {
+          "default": 1200,
+          "description": "上一章尾部原文摘录最大字符数",
+          "minimum": 1,
+          "title": "Tail Excerpt Max Chars",
+          "type": "integer"
+        },
+        "tail_excerpt_min_chars": {
+          "default": 800,
+          "description": "上一章尾部原文摘录最小字符数",
+          "minimum": 0,
+          "title": "Tail Excerpt Min Chars",
+          "type": "integer"
+        },
+        "total": {
+          "default": 10000,
+          "description": "单章写作包总 Token 预算上限",
+          "minimum": 1,
+          "title": "Total",
+          "type": "integer"
+        },
+        "trim_order": {
+          "description": "超预算时的裁剪优先级顺序（仅允许中间三槽，首尾槽位永不可裁）",
+          "items": {
+            "type": "string"
+          },
+          "title": "Trim Order",
+          "type": "array"
+        }
+      },
+      "title": "TokenBudgetConfig",
+      "type": "object"
+    },
+    "TopicRef": {
+      "additionalProperties": true,
+      "description": "章节蓝图中按需挂载的实体专题切片引用。",
+      "properties": {
+        "entity_id": {
+          "pattern": "^[a-z][a-z0-9]*_[a-z0-9_]+$",
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "topic": {
+          "minLength": 1,
+          "title": "Topic",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id",
+        "topic"
+      ],
+      "title": "TopicRef",
+      "type": "object"
+    },
+    "VolumeDoc": {
+      "$defs": {
+        "_ChapterWindowTuple": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 1,
+              "title": "Start",
+              "type": "integer"
+            },
+            {
+              "minimum": 1,
+              "title": "End",
+              "type": "integer"
+            }
+          ],
+          "type": "array"
+        }
+      },
+      "additionalProperties": true,
+      "description": "分卷纲要文档模型（`02_structure/volumes/vol_XX.md`）。",
+      "properties": {
+        "body": {
+          "default": "",
+          "title": "Body",
+          "type": "string"
+        },
+        "chapter_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/_ChapterWindowTuple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "core_conflict": {
+          "default": "",
+          "title": "Core Conflict",
+          "type": "string"
+        },
+        "folded_summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Folded Summary"
+        },
+        "id": {
+          "pattern": "^vol_\\d{2,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VolumeDoc",
+      "type": "object"
+    },
+    "WorldState": {
+      "additionalProperties": true,
+      "description": "全局世界日历与大势截面模型（`03_state/world_state.yaml`）。",
+      "properties": {
+        "current_chapter": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Current Chapter",
+          "type": "integer"
+        },
+        "in_world_time": {
+          "default": "",
+          "title": "In World Time",
+          "type": "string"
+        },
+        "macro_situation": {
+          "default": "",
+          "title": "Macro Situation",
+          "type": "string"
+        }
+      },
+      "title": "WorldState",
+      "type": "object"
+    }
+  },
+  "schema_version": 1
+}

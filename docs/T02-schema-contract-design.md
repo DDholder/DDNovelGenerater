@@ -8,7 +8,7 @@
 > - [03-development-roadmap-and-dag.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/03-development-roadmap-and-dag.md)（全局 DAG，T02 行）
 > - [architecture-blueprint.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/architecture-blueprint.md)（文件格式样例 §3.2 ~ §3.4）
 >
-> **当前代码基线**：`T01` 已完成，[schemas/\_\_init\_\_.py](file:///D:/work/AI/proj/DDNovelGenerater/src/ddnovel/core/schemas/__init__.py) 为空占位；运行环境 Python 3.11 + Pydantic 2.14。
+> **当前代码基线**：**Gate 1 已完成冻结（`SCHEMA_VERSION = 1`）**，[schemas/\_\_init\_\_.py](file:///D:/work/AI/proj/DDNovelGenerater/src/ddnovel/core/schemas/__init__.py) 统一导出 85 个公开符号与 49 个具体模型 JSON Schema（快照锁定于 `tests/schemas/snapshots/schema_v1.json`）；运行环境 Python 3.11 + Pydantic 2.14。
 
 ---
 
@@ -776,12 +776,12 @@ flowchart LR
 
 ## 4. 验收标准（Definition of Done）
 
-- [ ] `src/ddnovel/core/schemas/` 下 `_base / config / genres / models / results / __init__` 六个文件完成，单向依赖无循环导入。
-- [ ] `general / cultivation_rpg / mystery_intrigue` 三套题材 fixtures 校验与往返测试通过（对应路线图 T02 验收标准）。
-- [ ] 与 [architecture-blueprint.md §3.2](file:///D:/work/AI/proj/DDNovelGenerater/docs/architecture-blueprint.md) 中 `characters.yaml` 与 JSONL 样例**逐字可加载**。
-- [ ] `export_json_schemas()` 输出合法，契约快照已提交。
-- [ ] `uv run ruff check` 零告警，`uv run pytest` 全绿（含 T01 冒烟测试）。
-- [ ] [02-system-architecture-design.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/02-system-architecture-design.md) 类图 / ER 图与最终字段名一致（如有差异已勘误）。
+- [x] `src/ddnovel/core/schemas/` 下 `_base / config / genres / models / results / __init__` 六个文件完成，单向依赖无循环导入。
+- [x] `general / cultivation_rpg / mystery_intrigue` 三套题材 fixtures 校验与往返测试通过（对应路线图 T02 验收标准）。
+- [x] 与 [architecture-blueprint.md §3.2](file:///D:/work/AI/proj/DDNovelGenerater/docs/architecture-blueprint.md) 中 `characters.yaml` 与 JSONL 样例**逐字可加载**。
+- [x] `export_json_schemas()` 输出合法，契约快照已提交。
+- [x] `uv run ruff check` 零告警，`uv run pytest` 全绿（含 T01 冒烟测试）。
+- [x] [02-system-architecture-design.md](file:///D:/work/AI/proj/DDNovelGenerater/docs/02-system-architecture-design.md) 类图 / ER 图与最终字段名一致（如有差异已勘误）。
 
 ---
 

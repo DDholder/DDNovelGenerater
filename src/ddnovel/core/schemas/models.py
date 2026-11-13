@@ -5,12 +5,21 @@
 - 结构维 (`02_structure/`)：`VolumeDoc`、`ArcDoc`、`BlueprintCast`、
   `ThreadRef`、`TopicRef`、`Beat`、`BlueprintDoc`
 - 创作维 (`04_creation/`)：`StyleGuide`
-- 状态维 (`03_state/`)：由子任务 T02.5 在本文件末尾预留区域继续补充
+- 状态维 (`03_state/`)：`EpistemicBounds`、`CharacterState`、`CharacterStateFile`、
+  `FactionState`、`FactionStateFile`、`WorldState`、`TemporalRelation`、
+  `RelationsFile`、`Thread`、`ThreadsFile`、`ChapterFactRecord`
 """
 
-from typing import Any, Self, TypeVar
+from typing import Annotated, Any, Self, TypeVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import (
+    BeforeValidator,
+    Field,
+    RootModel,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from ._base import (
     ArcId,
@@ -22,9 +31,11 @@ from ._base import (
     SettingCategory,
     ThreadAction,
     ThreadId,
+    ThreadStatus,
     ValidatedModel,
     VolumeId,
 )
+from .genres import validate_ext
 
 _T = TypeVar("_T")
 
@@ -265,16 +276,233 @@ class StyleGuide(ValidatedModel):
 
 
 # ---------------------------------------------------------------------------
-# 4. 状态维 (03_state/) —— 预留供 T02.5 补充实现
+# 4. 状态维 (03_state/)
 # ---------------------------------------------------------------------------
-# TODO(T02.5): 在此处继续补充以下状态维模型与文件容器，并同步追加到 __all__：
-# - EpistemicBounds
-# - CharacterState / CharacterStateFile
-# - FactionState / FactionStateFile
-# - WorldState
-# - TemporalRelation / RelationsFile
-# - Thread / ThreadsFile
-# - ChapterFactRecord
+
+
+def _reject_bool_non_negative_int(value: Any) -> Any:
+    """防止布尔值 True/False 被静默当作章号 1/0。"""
+    if isinstance(value, bool):
+        raise ValueError("章号必须为非负整数，不能为布尔值")
+    return value
+
+
+_NonNegativeChapterInt = Annotated[
+    int, Field(ge=0), BeforeValidator(_reject_bool_non_negative_int)
+]
+
+
+def _validate_profile_ext_with_context(
+    value: dict[str, Any], info: ValidationInfo
+) -> dict[str, Any]:
+    """按 ValidationInfo.context['genre_profile'] 校验并归一化题材扩展槽。"""
+    context = info.context
+    genre_profile = context.get("genre_profile") if isinstance(context, dict) else None
+    if genre_profile is None or genre_profile == "":
+        return dict(value)
+    if not isinstance(genre_profile, str):
+        raise ValueError("context['genre_profile'] 必须为字符串")
+    try:
+        return validate_ext(genre_profile, value)
+    except KeyError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+class EpistemicBounds(ValidatedModel):
+    """角色认知边界三元组（防全知视角剧透红线）。"""
+
+    knows: list[str] = Field(default_factory=list)
+    unaware_of: list[str] = Field(default_factory=list)
+    misbelieves: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _clean_bound_lists(self) -> Self:
+        self.knows = _clean_str_list(self.knows)
+        self.unaware_of = _clean_str_list(self.unaware_of)
+        self.misbelieves = _clean_str_list(self.misbelieves)
+        return self
+
+
+class CharacterState(ValidatedModel):
+    """单个角色的当前动态状态截面（`03_state/{active,archive}/characters.yaml` 值模型）。"""
+
+    updated_at_ch: ChapterNum
+    location: EntityId | None = None
+    physical_mental: str = ""
+    current_goals: list[str] = Field(default_factory=list)
+    epistemic_bounds: EpistemicBounds = Field(default_factory=EpistemicBounds)
+    profile_ext: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("profile_ext", mode="after")
+    @classmethod
+    def _validate_profile_ext(
+        cls, value: dict[str, Any], info: ValidationInfo
+    ) -> dict[str, Any]:
+        return _validate_profile_ext_with_context(value, info)
+
+    @model_validator(mode="after")
+    def _clean_goals(self) -> Self:
+        self.current_goals = _clean_str_list(self.current_goals)
+        return self
+
+
+class CharacterStateFile(RootModel[dict[EntityId, CharacterState]]):
+    """角色状态截面映射文件容器（`03_state/{active,archive}/characters.yaml`）。"""
+
+    root: dict[EntityId, CharacterState] = Field(default_factory=dict)
+
+
+class FactionState(ValidatedModel):
+    """单个势力/组织的当前动态状态截面（`03_state/{active,archive}/factions.yaml` 值模型）。"""
+
+    updated_at_ch: ChapterNum
+    status: EntityStatus = EntityStatus.ACTIVE
+    leader: EntityId | None = None
+    territory: list[EntityId] = Field(default_factory=list)
+    current_goals: list[str] = Field(default_factory=list)
+    profile_ext: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("profile_ext", mode="after")
+    @classmethod
+    def _validate_profile_ext(
+        cls, value: dict[str, Any], info: ValidationInfo
+    ) -> dict[str, Any]:
+        return _validate_profile_ext_with_context(value, info)
+
+    @model_validator(mode="after")
+    def _normalize_faction_lists(self) -> Self:
+        self.territory = _dedupe_list(self.territory)
+        self.current_goals = _clean_str_list(self.current_goals)
+        return self
+
+
+class FactionStateFile(RootModel[dict[EntityId, FactionState]]):
+    """势力状态截面映射文件容器（`03_state/{active,archive}/factions.yaml`）。"""
+
+    root: dict[EntityId, FactionState] = Field(default_factory=dict)
+
+
+class WorldState(ValidatedModel):
+    """全局世界日历与大势截面模型（`03_state/world_state.yaml`）。"""
+
+    current_chapter: _NonNegativeChapterInt = 0
+    in_world_time: str = ""
+    macro_situation: str = ""
+
+
+class TemporalRelation(ValidatedModel):
+    """双时态实体关系边（左闭右开生效区间 ``[valid_from_ch, invalid_at_ch)``）。"""
+
+    source: EntityId
+    target: EntityId
+    relation: str = Field(..., min_length=1)
+    valid_from_ch: ChapterNum
+    invalid_at_ch: ChapterNum | None = None
+
+    @model_validator(mode="after")
+    def _validate_relation_endpoints_and_window(self) -> Self:
+        if self.source == self.target:
+            raise ValueError(f"关系边起点 source 与终点 target 不能为同一实体: '{self.source}'")
+        if self.invalid_at_ch is not None and self.invalid_at_ch <= self.valid_from_ch:
+            raise ValueError(
+                f"关系边失效章号 invalid_at_ch ({self.invalid_at_ch}) "
+                f"必须严格大于生效起始章号 valid_from_ch ({self.valid_from_ch})"
+            )
+        return self
+
+    def is_valid_at(self, ch: int) -> bool:
+        """判断当前关系边在指定章号 ``ch`` 是否仍处于有效状态。"""
+        if isinstance(ch, bool) or not isinstance(ch, int) or ch < 1:
+            raise ValueError(f"章号 ch 必须为 >= 1 的整数，收到: {ch!r}")
+        return self.valid_from_ch <= ch and (
+            self.invalid_at_ch is None or ch < self.invalid_at_ch
+        )
+
+
+class RelationsFile(ValidatedModel):
+    """双时态实体关系文件容器（`03_state/relations.yaml` 及 `archive/relations.yaml`）。"""
+
+    relations: list[TemporalRelation] = Field(default_factory=list)
+
+
+class Thread(ValidatedModel):
+    """悬线与事件伏笔台账条目（`03_state/threads.yaml` 列表项）。"""
+
+    id: ThreadId
+    title: str = Field(..., min_length=1)
+    category: str | None = None
+    status: ThreadStatus = ThreadStatus.PLANTED
+    planted_at: ChapterNum
+    last_progressed_at: ChapterNum
+    expected_window: ChapterWindow | None = None
+    trigger_entities: list[EntityId] = Field(default_factory=list)
+    public_clue: str = ""
+    truth_secret: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_and_normalize_thread(self) -> Self:
+        if self.category == "":
+            self.category = None
+        if self.last_progressed_at < self.planted_at:
+            raise ValueError(
+                f"伏笔 '{self.id}' 的 last_progressed_at ({self.last_progressed_at}) "
+                f"不能早于 planted_at ({self.planted_at})"
+            )
+        self.trigger_entities = _dedupe_list(self.trigger_entities)
+        return self
+
+
+class ThreadsFile(ValidatedModel):
+    """悬线与事件伏笔台账文件容器（`03_state/threads.yaml` 及 `archive/threads.yaml`）。"""
+
+    threads: list[Thread] = Field(default_factory=list)
+
+    @field_validator("threads", mode="after")
+    @classmethod
+    def _validate_unique_thread_ids(cls, threads: list[Thread]) -> list[Thread]:
+        seen: set[str] = set()
+        for item in threads:
+            if item.id in seen:
+                raise ValueError(f"伏笔台账 threads 中存在重复的 thread_id: '{item.id}'")
+            seen.add(item.id)
+        return threads
+
+
+class ChapterFactRecord(ValidatedModel):
+    """单章历史摘要与原子事实锚点（`03_state/history/vol_XX_facts.jsonl` 每行记录）。"""
+
+    ch: ChapterNum
+    volume_id: VolumeId | None = None
+    arc_id: ArcId | None = Field(default=None, alias="arc")
+    in_world_time: str | None = Field(default=None, alias="time")
+    summary: str = Field(..., min_length=1)
+    facts: list[str]
+    entities: list[EntityId] = Field(default_factory=list)
+
+    @field_validator("facts", mode="after")
+    @classmethod
+    def _validate_and_clean_facts(cls, facts: list[str]) -> list[str]:
+        if len(facts) > 8:
+            raise ValueError(f"单章原子事实 facts 数量上限为 8 条，实际收到 {len(facts)} 条")
+        cleaned = _clean_str_list(facts)
+        if len(cleaned) < 1:
+            raise ValueError("单章原子事实 facts 至少需要 1 条非空事实")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _validate_and_normalize_record(self) -> Self:
+        if (
+            self.volume_id is not None
+            and self.arc_id is not None
+            and not self.arc_id.startswith(f"{self.volume_id}_arc_")
+        ):
+            raise ValueError(
+                f"历史事实记录 arc_id '{self.arc_id}' 的分卷前缀与 volume_id '{self.volume_id}' 不一致"
+            )
+        if self.in_world_time == "":
+            self.in_world_time = None
+        self.entities = _dedupe_list(self.entities)
+        return self
 
 
 __all__ = [
@@ -282,10 +510,21 @@ __all__ = [
     "Beat",
     "BlueprintCast",
     "BlueprintDoc",
+    "ChapterFactRecord",
+    "CharacterState",
+    "CharacterStateFile",
+    "EpistemicBounds",
+    "FactionState",
+    "FactionStateFile",
+    "RelationsFile",
     "SettingDoc",
     "SettingFrontmatter",
     "StyleGuide",
+    "TemporalRelation",
+    "Thread",
     "ThreadRef",
+    "ThreadsFile",
     "TopicRef",
     "VolumeDoc",
+    "WorldState",
 ]
