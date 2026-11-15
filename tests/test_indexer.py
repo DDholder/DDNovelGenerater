@@ -1437,3 +1437,56 @@ def test_cross_file_unarchive_migration_single_batch_sync(empty_book: Path) -> N
         idx.rebuild()
         assert idx.get_entity_bundle("char_revive") == revive_bundle
         assert idx.get_entity_bundle("char_dead") == dead_bundle
+
+
+def test_indexer_and_impact_strictly_exclude_author_notes_layer(tmp_path: Path) -> None:
+    """验证 00_作者设定/ 与 00_author_notes/ 100% 物理隔离于 SQLite 索引、别名匹配、向量库与五维扫描。"""
+    from ddnovel.core.impact import ImpactAnalyzer
+    from ddnovel.templates.initializer import init_book
+
+    book_dir = tmp_path / "two_layer_book"
+    init_book(book_dir, title="双层隔离测试", include_samples=True)
+
+    zh_note = book_dir / "00_作者设定" / "人物" / "char_author_only-苏玥随笔.md"
+    zh_note.parent.mkdir(parents=True, exist_ok=True)
+    zh_note.write_text(
+        "---\n"
+        "id: char_author_only\n"
+        "name: 苏玥秘密分身\n"
+        "aliases:\n"
+        "  - 独占暗语别名\n"
+        "category: character\n"
+        "---\n"
+        "## [核心]\n"
+        "霓虹天台独占秘密词元：苏玥曾悄悄说“谁要你多管闲事”。\n",
+        encoding="utf-8",
+    )
+
+    legacy_note = book_dir / "00_author_notes" / "draft_memo.md"
+    legacy_note.parent.mkdir(parents=True, exist_ok=True)
+    legacy_note.write_text(
+        "# 青色咖啡杯口头禅\n\n这句台词和场景仅作者可见。\n",
+        encoding="utf-8",
+    )
+
+    with SqliteIndexer(book_dir) as idx:
+        idx.rebuild()
+
+        indexed_rows = idx.conn.execute("SELECT rel_path FROM file_hashes").fetchall()
+        indexed_paths = [str(r[0]) for r in indexed_rows]
+        assert not any(
+            p.startswith("00_作者设定/") or p.startswith("00_author_notes/")
+            for p in indexed_paths
+        )
+
+        assert idx.get_entity("char_author_only") is None
+        assert idx.search_fts("霓虹天台独占秘密词元") == []
+        assert idx.search_fts("青色咖啡杯口头禅") == []
+
+        matcher = idx.get_alias_matcher()
+        matches = matcher.scan_text("独占暗语别名在雨夜出现。")
+        assert "char_author_only" not in [m.entity_id for m in matches]
+
+    with ImpactAnalyzer(book_dir) as analyzer:
+        impact_rep = analyzer.scan_impact("霓虹天台独占秘密词元")
+        assert impact_rep.hits == []

@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 from collections.abc import Callable, Sequence
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
 
 import typer
+import typer.rich_utils as _typer_rich_utils
 import yaml
 from pydantic import TypeAdapter, ValidationError
 from rich.console import Console
@@ -30,11 +32,33 @@ from ddnovel.core import (
     ProgressiveParser,
     SqliteIndexer,
     estimate_tokens,
+    lint_model_setting_doc,
     split_frontmatter,
+)
+from ddnovel.core.parser import CATEGORY_SYNONYMS
+from ddnovel.core.paths import (
+    find_existing_blueprint_file,
+    find_existing_setting_file,
+    resolve_active_characters_file,
+    resolve_active_factions_file,
+    resolve_arc_file,
+    resolve_archive_characters_file,
+    resolve_archive_factions_file,
+    resolve_blueprint_file,
+    resolve_blueprints_dir,
+    resolve_config_path,
+    resolve_draft_file,
+    resolve_facts_file,
+    resolve_packet_file,
+    resolve_relations_file,
+    resolve_setting_file,
+    resolve_settings_root,
+    resolve_threads_file,
+    resolve_volume_file,
+    resolve_world_state_file,
 )
 from ddnovel.core.schemas import (
     ID_PREFIX_CATEGORY,
-    NOVEL_CONFIG_FILENAME,
     VOLUME_ID_PATTERN,
     ArcDoc,
     Beat,
@@ -65,65 +89,120 @@ from ddnovel.core.schemas import (
     TopicRef,
     VolumeDoc,
     WorldState,
-    format_chapter,
 )
 from ddnovel.templates import ProjectInitializer
+
+# 汉化 Typer/Rich 帮助与错误面板标题
+_typer_rich_utils.ARGUMENTS_PANEL_TITLE = "参数"
+_typer_rich_utils.OPTIONS_PANEL_TITLE = "选项"
+_typer_rich_utils.COMMANDS_PANEL_TITLE = "子命令"
+_typer_rich_utils.ERRORS_PANEL_TITLE = "错误"
+_typer_rich_utils.ABORTED_TEXT = "已中止。"
+_typer_rich_utils.DEFAULT_STRING = "[默认: {}]"
+_typer_rich_utils.DEPRECATED_STRING = "（已弃用）"
+_typer_rich_utils.ENVVAR_STRING = "[环境变量: {}]"
+_typer_rich_utils.REQUIRED_LONG_STRING = "[必填]"
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 console = Console()
 
+_CONTEXT_SETTINGS: dict[str, Any] = {"help_option_names": ["-h", "--help"]}
+
 app = typer.Typer(
     name="ddnovel",
-    help="DDNovelGenerater 长篇小说创作工程引擎 CLI",
+    help="DDNovelGenerater 长篇小说创作工程引擎 CLI（支持 -h / --help 查看帮助）",
+    epilog=(
+        "常用子命令速查:\n"
+        "  ddnovel init <目录> -t <书名> -g cultivation_rpg -H antigravity 初始化新书库\n"
+        "  ddnovel host install antigravity                               安装本机全局 Antigravity 插件\n"
+        "  ddnovel setting upsert char_linfan -n 林凡 -c character        新增/更新设定\n"
+        "  ddnovel structure blueprint 1 -t 第一章 -p char_linfan         编写单章蓝图\n"
+        "  ddnovel radar -c 10                                            扫描伏笔预警\n"
+        "  ddnovel packet build 10 -b 6000                                编译单章写作包\n"
+        "  ddnovel draft save 10 -f ./ch10.md && ddnovel audit 10         存草稿并一致性体检\n"
+        "  ddnovel chapter promote 10 -v vol_01                           审校定稿入库\n"
+        "  ddnovel state update -c 10 -s '本章摘要' -F '事实1' -F '事实2'   结算章节状态与事实\n\n"
+        "提示: 任意子命令均可加 -h 或 --help 查看详细参数与示例，例如: ddnovel state update -h"
+    ),
     no_args_is_help=True,
     add_completion=False,
+    context_settings=_CONTEXT_SETTINGS,
 )
 
 setting_app = typer.Typer(
     name="setting",
-    help="设定维护、五维防吃书影响面扫描与废案剪枝 (01_settings/)",
+    help="设定维护、五维防吃书影响面扫描与废案剪枝 (01_设定集/)",
+    epilog="示例: ddnovel setting upsert -h  |  ddnovel setting impact -h  |  ddnovel setting prune -h",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 structure_app = typer.Typer(
     name="structure",
-    help="分卷、单元与单章分场节拍蓝图维护 (02_structure/)",
+    help="分卷、单元与单章分场节拍蓝图维护 (02_结构/)",
+    epilog=(
+        "示例: ddnovel structure volume -h  |  "
+        "ddnovel structure arc -h  |  "
+        "ddnovel structure blueprint -h"
+    ),
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 packet_app = typer.Typer(
     name="packet",
-    help="单章 U 型注意力写作包一步直出编译与查阅 (04_creation/packets/)",
+    help="单章 U 型注意力写作包一步直出编译与查阅 (04_创作/写作包/)",
+    epilog="示例: ddnovel packet build 10 -b 6000  |  ddnovel packet show 10",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 draft_app = typer.Typer(
     name="draft",
-    help="单章初稿保存与查阅 (04_creation/drafts/)",
+    help="单章初稿保存与查阅 (04_创作/草稿/)",
+    epilog="示例: ddnovel draft save 10 -f ./ch10.md  |  ddnovel draft show 10",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 chapter_app = typer.Typer(
     name="chapter",
-    help="章节审校定稿入库与过程产物自动清理 (04_creation/manuscript/)",
+    help="章节审校定稿入库与过程产物自动清理 (04_创作/定稿/)",
+    epilog="示例: ddnovel chapter promote 10 -v vol_01  |  ddnovel chapter promote 10 -n",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 state_app = typer.Typer(
     name="state",
-    help="动态状态截面、历史原子事实结算、实体状态检视与冷归档 (03_state/)",
+    help="动态状态截面、历史原子事实结算、实体状态检视与冷归档 (03_状态/)",
+    epilog="示例: ddnovel state update -h  |  ddnovel state inspect char_linfan  |  ddnovel state gc -n",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 index_app = typer.Typer(
     name="index",
     help="SQLite 派生索引增量热同步与零污染全量重建 (.ddnovel/index.sqlite)",
+    epilog="示例: ddnovel index sync -d .  |  ddnovel index rebuild -d .",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 thread_app = typer.Typer(
     name="thread",
-    help="伏笔悬线台账查阅与主动弃坑硬删除 (03_state/threads.yaml)",
+    help="伏笔悬线台账查阅与主动弃坑硬删除 (03_状态/伏笔台账.yaml)",
+    epilog="示例: ddnovel thread list -s active  |  ddnovel thread drop <thread_id> -n",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 history_app = typer.Typer(
     name="history",
-    help="远期完结卷原子事实蒸馏浓缩与历史台账维护 (03_state/history/)",
+    help="远期完结卷原子事实蒸馏浓缩与历史台账维护 (03_状态/历史/)",
+    epilog="示例: ddnovel history compact vol_01 -n  |  ddnovel history compact vol_01 -f milestones.jsonl",
     no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
+)
+host_app = typer.Typer(
+    name="host",
+    help="AI 宿主配置同步与全局插件安装 (opencode / dsh / claude / antigravity)",
+    epilog="示例: ddnovel host install antigravity  |  ddnovel host sync -d . -H antigravity",
+    no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
 )
 
 app.add_typer(setting_app, name="setting")
@@ -135,6 +214,7 @@ app.add_typer(state_app, name="state")
 app.add_typer(index_app, name="index")
 app.add_typer(thread_app, name="thread")
 app.add_typer(history_app, name="history")
+app.add_typer(host_app, name="host")
 
 _ENTITY_ID_ADAPTER: TypeAdapter[str] = TypeAdapter(EntityId)
 _VOLUME_DIR_RE: re.Pattern[str] = re.compile(VOLUME_ID_PATTERN)
@@ -192,10 +272,10 @@ def _resolve_book_dir(
 
 
 def _load_book_config(book_dir: Path) -> NovelConfig:
-    cfg_path = book_dir / NOVEL_CONFIG_FILENAME
+    cfg_path = resolve_config_path(book_dir)
     if cfg_path.is_file():
         return NovelConfig.load(book_dir)
-    return NovelConfig(title=book_dir.name or "Untitled")
+    return NovelConfig(title=book_dir.name or "未命名小说")
 
 
 def _dump_yaml(data: Any) -> str:
@@ -223,6 +303,27 @@ def _split_multi_opts(items: Sequence[str] | None) -> list[str]:
                 seen.add(cleaned)
                 result.append(cleaned)
     return result
+
+
+def _parse_mcp_command_opt(items: Sequence[str] | None) -> list[str] | None:
+    """解析 --mcp-command 选项：单字符串非现有文件路径时按 Shell 规则拆分，多参数保留序列。"""
+    if not items:
+        return None
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return None
+    if len(cleaned) == 1:
+        single = cleaned[0]
+        if Path(single).expanduser().exists():
+            return [single]
+        if any(ch.isspace() for ch in single):
+            tokens = [
+                tok.strip("\"'")
+                for tok in shlex.split(single, posix=(os.name != "nt"))
+                if tok.strip("\"'")
+            ]
+            return tokens or [single]
+    return cleaned
 
 
 def _parse_chapter_range(
@@ -277,10 +378,26 @@ def _cli_guard(func: _F) -> _F:
 # ---------------------------------------------------------------------------
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"ddnovel [bold cyan]{__version__}[/]")
+        raise typer.Exit()
+
+
 @app.callback()
 def _root(
     ctx: typer.Context,
     book_dir: BookDirOption = None,
+    version_flag: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_version_callback,
+            is_eager=True,
+            help="显示引擎版本号并退出",
+        ),
+    ] = False,
 ) -> None:
     """DDNovelGenerater 长篇小说创作工程引擎 CLI。"""
     _store_ctx_book_dir(ctx, book_dir)
@@ -331,6 +448,11 @@ def _history_cb(ctx: typer.Context, book_dir: BookDirOption = None) -> None:
     _store_ctx_book_dir(ctx, book_dir)
 
 
+@host_app.callback()
+def _host_cb(ctx: typer.Context, book_dir: BookDirOption = None) -> None:
+    _store_ctx_book_dir(ctx, book_dir)
+
+
 @app.command()
 def version() -> None:
     """显示引擎版本号。"""
@@ -342,7 +464,14 @@ def version() -> None:
 # ---------------------------------------------------------------------------
 
 
-@app.command("init")
+@app.command(
+    "init",
+    epilog=(
+        "示例:\n"
+        "  ddnovel init ./my_book -t 青云问道 -a 作者 -g cultivation_rpg -H antigravity\n"
+        "  ddnovel init ./blank_book -S -w 4 -f"
+    ),
+)
 @_cli_guard
 def init_cmd(
     ctx: typer.Context,
@@ -371,31 +500,39 @@ def init_cmd(
         typer.Option(
             "--host",
             "-H",
-            help="生成指定 AI 宿主配置与 Skills 目录 (opencode | dsh | claude)，可多次指定",
+            help="生成指定 AI 宿主配置与 Skills 目录 (opencode | dsh | claude | antigravity)，可多次指定",
+        ),
+    ] = None,
+    mcp_command: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mcp-command",
+            "-m",
+            help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
         ),
     ] = None,
     no_samples: Annotated[
         bool,
-        typer.Option("--no-samples", help="仅生成空容器骨架，不写入起始示例设定与首章蓝图"),
+        typer.Option("--no-samples", "-S", help="仅生成空容器骨架，不写入起始示例设定与首章蓝图"),
     ] = False,
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="若目标目录已存在 novel.yaml 则强制覆盖初始化"),
+        typer.Option("--force", "-f", help="若目标目录已存在小说配置文件则强制覆盖初始化"),
     ] = False,
     chapter_id_width: Annotated[
         int,
-        typer.Option("--chapter-id-width", help="章节文件编号零填充宽度"),
+        typer.Option("--chapter-id-width", "-w", help="章节文件编号零填充宽度"),
     ] = 4,
     book_dir: BookDirOption = None,
 ) -> None:
-    """初始化四维小说书库骨架、题材预设与多宿主 (opencode / dsh / claude) 配置。"""
+    """初始化四维小说书库骨架、题材预设与多宿主 (opencode / dsh / claude / antigravity) 配置。"""
     resolved_dir = (
         Path(target_dir).resolve()
         if target_dir is not None
         else _resolve_book_dir(book_dir, ctx)
     )
     hosts = _split_multi_opts(host)
-    initializer = ProjectInitializer()
+    initializer = ProjectInitializer(mcp_command=_parse_mcp_command_opt(mcp_command))
     res = initializer.init_book(
         resolved_dir,
         title=title,
@@ -424,17 +561,193 @@ def init_cmd(
 
 
 # ---------------------------------------------------------------------------
+# Group 1.5: AI 宿主配置同步与全局插件安装 (host)
+# ---------------------------------------------------------------------------
+
+
+def _run_host_install(
+    *,
+    host: str,
+    plugin_dir: Path | None,
+    mcp_command: list[str] | None,
+    no_overwrite: bool,
+) -> None:
+    initializer = ProjectInitializer(mcp_command=_parse_mcp_command_opt(mcp_command))
+    res = initializer.install_global_plugin(
+        host,
+        plugin_dir=plugin_dir,
+        overwrite=not no_overwrite,
+    )
+
+    table = Table(title="全局 AI 宿主插件安装摘要", show_header=True, header_style="bold cyan")
+    table.add_column("项目", style="bold")
+    table.add_column("详情")
+    table.add_row("宿主类型", res.host.value)
+    table.add_row("插件安装目录", res.plugin_dir.as_posix())
+    table.add_row("MCP 启动命令", " ".join(res.mcp_command))
+    table.add_row("写入/更新文件数", str(len(res.written_files)))
+    table.add_row("Antigravity 管理页", f"customization://{res.plugin_dir.name}")
+    console.print(table)
+
+
+@host_app.command(
+    "install",
+    epilog=(
+        "示例:\n"
+        "  ddnovel host install antigravity\n"
+        "  ddnovel host install antigravity -m 'uv run --directory D:/repo ddnovel-mcp'"
+    ),
+)
+@_cli_guard
+def host_install_cmd(
+    host: Annotated[
+        str,
+        typer.Argument(help="目标全局插件宿主类型（目前支持 antigravity）"),
+    ] = "antigravity",
+    plugin_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--plugin-dir",
+            "-p",
+            help="自定义插件安装目录（默认 ~/.gemini/config/plugins/ddnovel）",
+        ),
+    ] = None,
+    mcp_command: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mcp-command",
+            "-m",
+            help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    no_overwrite: Annotated[
+        bool,
+        typer.Option("--no-overwrite", help="保留插件目录中已存在的自定义文件，不覆盖写入"),
+    ] = False,
+) -> None:
+    """在本机全局配置目录安装/升级 AI 宿主插件（支持一引擎驱动多本小说书库）。"""
+    _run_host_install(
+        host=host,
+        plugin_dir=plugin_dir,
+        mcp_command=mcp_command,
+        no_overwrite=no_overwrite,
+    )
+
+
+@host_app.command(
+    "install-global",
+    epilog="示例: ddnovel host install-global antigravity",
+)
+@_cli_guard
+def host_install_global_cmd(
+    host: Annotated[
+        str,
+        typer.Argument(help="目标全局插件宿主类型（目前支持 antigravity）"),
+    ] = "antigravity",
+    plugin_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--plugin-dir",
+            "-p",
+            help="自定义插件安装目录（默认 ~/.gemini/config/plugins/ddnovel）",
+        ),
+    ] = None,
+    mcp_command: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mcp-command",
+            "-m",
+            help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    no_overwrite: Annotated[
+        bool,
+        typer.Option("--no-overwrite", help="保留插件目录中已存在的自定义文件，不覆盖写入"),
+    ] = False,
+) -> None:
+    """安装/升级本机全局 AI 宿主插件（host install 的同义命令）。"""
+    _run_host_install(
+        host=host,
+        plugin_dir=plugin_dir,
+        mcp_command=mcp_command,
+        no_overwrite=no_overwrite,
+    )
+
+
+@host_app.command(
+    "sync",
+    epilog=(
+        "示例:\n"
+        "  ddnovel host sync -d ./my_book -H antigravity\n"
+        "  ddnovel host sync -d ./my_book --no-overwrite"
+    ),
+)
+@_cli_guard
+def host_sync_cmd(
+    ctx: typer.Context,
+    host: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--host",
+            "-H",
+            help="要同步的宿主类型 (opencode | dsh | claude | antigravity)，省略则读取小说配置中的 hosts",
+        ),
+    ] = None,
+    mcp_command: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mcp-command",
+            "-m",
+            help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    no_overwrite: Annotated[
+        bool,
+        typer.Option("--no-overwrite", help="保留书库中已存在的宿主配置与自定义 SKILL.md"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """为现有小说书库增量生成或刷新工作区级 AI 宿主配置与技能目录。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+    hosts = _split_multi_opts(host)
+    if not hosts:
+        cfg = _load_book_config(bdir)
+        hosts = [h.value for h in cfg.hosts]
+    if not hosts:
+        raise ValueError(
+            "未指定 --host，且当前书库配置中也未记录 hosts；请至少传入一个宿主如 -H antigravity"
+        )
+
+    initializer = ProjectInitializer(mcp_command=_parse_mcp_command_opt(mcp_command))
+    written = initializer.render_host_configs(
+        bdir,
+        hosts,
+        overwrite=not no_overwrite,
+        update_novel_yaml=True,
+    )
+
+    table = Table(title="工作区 AI 宿主配置同步摘要", show_header=True, header_style="bold cyan")
+    table.add_column("项目", style="bold")
+    table.add_column("详情")
+    table.add_row("书库目录", bdir.as_posix())
+    table.add_row("同步宿主", ", ".join(hosts))
+    table.add_row("覆盖模式", "否 (--no-overwrite)" if no_overwrite else "是")
+    table.add_row("写入/更新文件数", str(len(written)))
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
 # Group 2 & 3: 设定维护与设定影响面 (setting)
 # ---------------------------------------------------------------------------
 
 
 def _find_existing_setting_path(book_dir: Path, entity_id: str) -> Path | None:
-    settings_root = book_dir / "01_settings"
+    direct = find_existing_setting_file(book_dir, entity_id)
+    if direct is not None:
+        return direct
+    settings_root = resolve_settings_root(book_dir)
     if not settings_root.is_dir():
         return None
-    direct = sorted(settings_root.rglob(f"{entity_id}.md"))
-    if direct:
-        return direct[0]
     parser = ProgressiveParser(book_dir=book_dir)
     for md_path in sorted(settings_root.rglob("*.md")):
         if not md_path.is_file():
@@ -487,7 +800,15 @@ def _compose_setting_body(
     return "\n\n".join(sections)
 
 
-@setting_app.command("upsert")
+@setting_app.command(
+    "upsert",
+    epilog=(
+        "示例:\n"
+        "  ddnovel setting upsert char_linfan -n 林凡 -c character -a 凡哥 -t 主角 -C '青云门外门弟子'\n"
+        "  ddnovel setting upsert char_linfan -T '功法:青云诀第三重' -S '上古剑尊转世'\n"
+        "  ddnovel setting upsert --id item_gujing -f ./item_gujing.md"
+    ),
+)
 @_cli_guard
 def setting_upsert_cmd(
     ctx: typer.Context,
@@ -525,15 +846,15 @@ def setting_upsert_cmd(
     ] = None,
     core: Annotated[
         str | None,
-        typer.Option("--core", help="## [核心] 切片正文（默认入包）"),
+        typer.Option("--core", "-C", help="## [核心] 切片正文（默认入包）"),
     ] = None,
     topic: Annotated[
         list[str] | None,
-        typer.Option("--topic", help="按需专题切片，格式 '专题名:内容'（可多次指定）"),
+        typer.Option("--topic", "-T", help="按需专题切片，格式 '专题名:内容'（可多次指定）"),
     ] = None,
     secret: Annotated[
         str | None,
-        typer.Option("--secret", help="## [机密] 切片正文（默认物理隔离）"),
+        typer.Option("--secret", "-S", help="## [机密] 切片正文（默认物理隔离）"),
     ] = None,
     from_file: Annotated[
         Path | None,
@@ -541,7 +862,7 @@ def setting_upsert_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """新建或更新设定卡片 (01_settings/<category>/<id>.md)，并自动增量同步索引。"""
+    """新建或更新设定卡片 (01_设定集/<分类>/<id>-<对象名>.md)，并自动增量同步索引。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     parser = ProgressiveParser(book_dir=bdir)
 
@@ -604,11 +925,12 @@ def setting_upsert_cmd(
         else (base_doc.secret_text if base_doc is not None else None)
     )
 
-    rel_dir = _CATEGORY_DIR_MAP.get(resolved_cat, "01_settings/other")
-    target_path = (
-        existing_path
-        if existing_path is not None and category is None
-        else bdir / rel_dir / f"{valid_id}.md"
+    target_path = resolve_setting_file(
+        bdir,
+        valid_id,
+        resolved_cat,
+        name=resolved_name,
+        for_write=True,
     )
     target_path.parent.mkdir(parents=True, exist_ok=True)
     rel_file_path = target_path.relative_to(bdir).as_posix()
@@ -639,12 +961,14 @@ def setting_upsert_cmd(
         validated_doc.topics,
         validated_doc.secret_text,
     )
-    if existing_path is not None and existing_path.resolve() != target_path.resolve():
-        existing_path.unlink(missing_ok=True)
     target_path.write_text(_render_frontmatter_md(fm_dict, body_md), encoding="utf-8")
+    if existing_path is not None and existing_path.is_file() and not existing_path.samefile(target_path):
+        existing_path.unlink(missing_ok=True)
 
     with SqliteIndexer(bdir) as indexer:
         sync_rep = indexer.sync()
+
+    abstraction_warnings = lint_model_setting_doc(validated_doc)
 
     console.print(
         Panel(
@@ -659,9 +983,14 @@ def setting_upsert_cmd(
             border_style="green",
         )
     )
+    for w in abstraction_warnings:
+        console.print(f"[yellow]⚠️ 抽象层检查告警: {w}[/]")
 
 
-@setting_app.command("list")
+@setting_app.command(
+    "list",
+    epilog="示例:\n  ddnovel setting list -c character\n  ddnovel setting list --no-archived",
+)
 @_cli_guard
 def setting_list_cmd(
     ctx: typer.Context,
@@ -675,7 +1004,11 @@ def setting_list_cmd(
     ] = None,
     include_archived: Annotated[
         bool,
-        typer.Option("--include-archived/--no-archived", help="是否包含冷库归档/已故/退隐设定"),
+        typer.Option(
+            "--include-archived/--no-archived",
+            "-A",
+            help="是否包含冷库归档/已故/退隐设定",
+        ),
     ] = True,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -715,7 +1048,10 @@ def setting_list_cmd(
     console.print(table)
 
 
-@setting_app.command("show")
+@setting_app.command(
+    "show",
+    epilog="示例:\n  ddnovel setting show char_linfan\n  ddnovel setting show 林凡 --hide-secret",
+)
 @_cli_guard
 def setting_show_cmd(
     ctx: typer.Context,
@@ -725,7 +1061,11 @@ def setting_show_cmd(
     ],
     show_secret: Annotated[
         bool,
-        typer.Option("--show-secret/--hide-secret", help="是否在终端展开显示 ## [机密] 切片内容"),
+        typer.Option(
+            "--show-secret/--hide-secret",
+            "-S",
+            help="是否在终端展开显示 ## [机密] 切片内容",
+        ),
     ] = True,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -789,7 +1129,10 @@ def setting_show_cmd(
     )
 
 
-@setting_app.command("impact")
+@setting_app.command(
+    "impact",
+    epilog="示例:\n  ddnovel setting impact char_linfan -c 50\n  ddnovel setting impact 青云诀 -A",
+)
 @_cli_guard
 def setting_impact_cmd(
     ctx: typer.Context,
@@ -803,7 +1146,7 @@ def setting_impact_cmd(
     ] = None,
     include_archived: Annotated[
         bool,
-        typer.Option("--include-archived", help="是否同时扫描 archive/ 冷库状态文件"),
+        typer.Option("--include-archived", "-A", help="是否同时扫描 archive/ 冷库状态文件"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -865,7 +1208,15 @@ def setting_impact_cmd(
         console.print(table)
 
 
-@setting_app.command("prune")
+@setting_app.command(
+    "prune",
+    epilog=(
+        "示例:\n"
+        "  ddnovel setting prune -c 80 -m 2 -a 30        # 仅 dry-run 预览候选废案\n"
+        "  ddnovel setting prune -c 80 -y               # 确认物理删除零引用/龙套设定\n"
+        "  ddnovel setting prune char_temp_01 -y -f     # 强制剪枝指定实体"
+    ),
+)
 @_cli_guard
 def setting_prune_cmd(
     ctx: typer.Context,
@@ -875,7 +1226,7 @@ def setting_prune_cmd(
     ] = None,
     apply: Annotated[
         bool,
-        typer.Option("--apply", help="执行物理文件删除与索引级联清理（默认仅 dry-run 预览）"),
+        typer.Option("--apply", "-y", help="执行物理文件删除与索引级联清理（默认仅 dry-run 预览）"),
     ] = False,
     current_chapter: Annotated[
         int | None,
@@ -883,11 +1234,11 @@ def setting_prune_cmd(
     ] = None,
     max_appearances: Annotated[
         int,
-        typer.Option("--max-appearances", help="一次性龙套最多历史出现章数阈值"),
+        typer.Option("--max-appearances", "-m", help="一次性龙套最多历史出现章数阈值"),
     ] = 2,
     min_age: Annotated[
         int | None,
-        typer.Option("--min-age", help="距离最后出场最小冷却章数阈值"),
+        typer.Option("--min-age", "-a", help="距离最后出场最小冷却章数阈值"),
     ] = None,
     force: Annotated[
         bool,
@@ -940,12 +1291,114 @@ def setting_prune_cmd(
     console.print(table)
 
 
+@setting_app.command(
+    "lint",
+    epilog=(
+        "示例:\n"
+        "  ddnovel setting lint\n"
+        "  ddnovel setting lint -c character\n"
+        "  ddnovel setting lint -A"
+    ),
+)
+@_cli_guard
+def setting_lint_cmd(
+    ctx: typer.Context,
+    category: Annotated[
+        str | None,
+        typer.Option(
+            "--category",
+            "-c",
+            help="按分类过滤 (world/rule/geography/faction/character/item/other 或中文)",
+        ),
+    ] = None,
+    include_archived: Annotated[
+        bool,
+        typer.Option(
+            "--include-archived",
+            "-A",
+            help="是否同时检查已归档/退场设定卡（默认仅检查 active）",
+        ),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """检查模型侧设定集（01_设定集/）是否存在具象场景、示范台词、动作指令清单或作者备忘泄露风险。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+    settings_root = resolve_settings_root(bdir)
+
+    cat_filter: SettingCategory | None = None
+    if category is not None and category.strip():
+        raw_cat = category.strip().lower()
+        cat_filter = CATEGORY_SYNONYMS.get(raw_cat) or SettingCategory(raw_cat)
+
+    parser = ProgressiveParser(book_dir=bdir)
+    scanned_count = 0
+    flagged_rows: list[tuple[SettingDoc, list[str]]] = []
+
+    if settings_root.is_dir():
+        for md_path in sorted(settings_root.rglob("*.md")):
+            doc = parser.parse_setting_md(md_path, book_dir=bdir)
+            if not include_archived and doc.status != EntityStatus.ACTIVE:
+                continue
+            if cat_filter is not None and doc.category != cat_filter:
+                continue
+            scanned_count += 1
+            warnings = lint_model_setting_doc(doc)
+            if warnings:
+                flagged_rows.append((doc, warnings))
+
+    total_warnings = sum(len(ws) for _, ws in flagged_rows)
+    if total_warnings == 0:
+        console.print(
+            Panel(
+                f"[bold green]✅ 抽象层体检通过：[/]共扫描 {scanned_count} 份模型侧设定卡（`01_设定集/`），"
+                "未发现具象场景、台词例句、预设动作清单或作者备忘泄露风险。",
+                title="设定抽象层体检 (setting lint)",
+                border_style="green",
+            )
+        )
+        return
+
+    console.print(
+        Panel(
+            f"[bold yellow]⚠️ 检测到模型侧设定抽象层泄露风险：[/]共扫描 {scanned_count} 份设定卡，"
+            f"[bold]{len(flagged_rows)}[/] 份命中 [bold red]{total_warnings}[/] 项告警。\n"
+            "建议将具象示范场景、台词例句、动作清单及灵感随笔移回 `00_作者设定/`，"
+            "并在 `01_设定集/` 仅保留“客观属性 + 抽象性格机制 + 规则边界”。",
+            title="设定抽象层体检 (setting lint)",
+            border_style="yellow",
+        )
+    )
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("实体 ID", style="cyan", no_wrap=True)
+    table.add_column("名称", style="bold")
+    table.add_column("分类")
+    table.add_column("文件路径", style="dim")
+    table.add_column("告警明细")
+    for doc, ws in flagged_rows:
+        table.add_row(
+            doc.id,
+            doc.name,
+            doc.category.value,
+            doc.file_path or "-",
+            "\n".join(f"- {w}" for w in ws),
+        )
+    console.print(table)
+
+
 # ---------------------------------------------------------------------------
 # Group 4: 结构与蓝图 (structure)
 # ---------------------------------------------------------------------------
 
 
-@structure_app.command("volume")
+@structure_app.command(
+    "volume",
+    epilog=(
+        "示例:\n"
+        "  ddnovel structure volume vol_01 -t 第一卷·青云初试 -r 1-60 -c 宗门大比危机\n"
+        "  ddnovel structure volume vol_01 -F '林凡入宗门夺魁并揭开暗线'"
+    ),
+)
 @_cli_guard
 def structure_volume_cmd(
     ctx: typer.Context,
@@ -967,19 +1420,19 @@ def structure_volume_cmd(
     ] = None,
     start_ch: Annotated[
         int | None,
-        typer.Option("--start-ch", help="起始章号"),
+        typer.Option("--start-ch", "-s", help="起始章号"),
     ] = None,
     end_ch: Annotated[
         int | None,
-        typer.Option("--end-ch", help="结束章号"),
+        typer.Option("--end-ch", "-e", help="结束章号"),
     ] = None,
     conflict: Annotated[
         str | None,
-        typer.Option("--conflict", "--core-conflict", help="本卷核心矛盾冲突一句话概述"),
+        typer.Option("--conflict", "--core-conflict", "-c", help="本卷核心矛盾冲突一句话概述"),
     ] = None,
     folded_summary: Annotated[
         str | None,
-        typer.Option("--folded-summary", help="完结卷折叠摘要（替代百章明细供后期宏观定位）"),
+        typer.Option("--folded-summary", "-F", help="完结卷折叠摘要（替代百章明细供后期宏观定位）"),
     ] = None,
     body: Annotated[
         str | None,
@@ -991,7 +1444,7 @@ def structure_volume_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """创建或更新分卷纲要文档 (02_structure/volumes/vol_XX.md)，支持写入卷级折叠摘要。"""
+    """创建或更新分卷纲要文档 (02_结构/分卷/第XX卷-<卷名>.md)，支持写入卷级折叠摘要。"""
     bdir = _resolve_book_dir(book_dir, ctx)
 
     file_fm: dict[str, Any] = {}
@@ -1007,11 +1460,11 @@ def structure_volume_cmd(
         raise ValueError("必须指定分卷 ID（例如: ddnovel structure volume vol_01 --title 破局）")
     vid = str(raw_vid).strip()
 
-    target_path = bdir / "02_structure" / "volumes" / f"{vid}.md"
+    existing_path = resolve_volume_file(bdir, vid, for_write=False)
     existing_fm: dict[str, Any] = {}
     existing_body = ""
-    if target_path.is_file():
-        existing_fm, existing_body = split_frontmatter(target_path.read_text(encoding="utf-8"))
+    if existing_path.is_file():
+        existing_fm, existing_body = split_frontmatter(existing_path.read_text(encoding="utf-8"))
 
     merged_fm = {**existing_fm, **file_fm, "id": vid}
     if title is not None:
@@ -1042,8 +1495,16 @@ def structure_volume_cmd(
         "core_conflict": doc.core_conflict,
         "folded_summary": doc.folded_summary,
     }
+    target_path = resolve_volume_file(
+        bdir,
+        doc.id,
+        title=doc.title or "",
+        for_write=True,
+    )
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(_render_frontmatter_md(fm_out, doc.body), encoding="utf-8")
+    if existing_path.is_file() and not existing_path.samefile(target_path):
+        existing_path.unlink(missing_ok=True)
 
     with SqliteIndexer(bdir) as indexer:
         indexer.sync()
@@ -1062,7 +1523,14 @@ def structure_volume_cmd(
     )
 
 
-@structure_app.command("arc")
+@structure_app.command(
+    "arc",
+    epilog=(
+        "示例:\n"
+        "  ddnovel structure arc vol_01_arc_01 -v vol_01 -t 外门试炼 -r 1-25\n"
+        "  ddnovel structure arc vol_01_arc_01 -F '外门试炼结束，林凡进入内门'"
+    ),
+)
 @_cli_guard
 def structure_arc_cmd(
     ctx: typer.Context,
@@ -1088,15 +1556,15 @@ def structure_arc_cmd(
     ] = None,
     start_ch: Annotated[
         int | None,
-        typer.Option("--start-ch", help="起始章号"),
+        typer.Option("--start-ch", "-s", help="起始章号"),
     ] = None,
     end_ch: Annotated[
         int | None,
-        typer.Option("--end-ch", help="结束章号"),
+        typer.Option("--end-ch", "-e", help="结束章号"),
     ] = None,
     folded_summary: Annotated[
         str | None,
-        typer.Option("--folded-summary", help="完结单元折叠摘要"),
+        typer.Option("--folded-summary", "-F", help="完结单元折叠摘要"),
     ] = None,
     body: Annotated[
         str | None,
@@ -1108,7 +1576,7 @@ def structure_arc_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """创建或更新剧情单元设计文档 (02_structure/arcs/vol_XX_arc_YY.md)。"""
+    """创建或更新剧情单元设计文档 (02_结构/单元/第XX卷_第YY单元-<单元名>.md)。"""
     bdir = _resolve_book_dir(book_dir, ctx)
 
     file_fm: dict[str, Any] = {}
@@ -1124,11 +1592,11 @@ def structure_arc_cmd(
         raise ValueError("必须指定单元 ID（例如: ddnovel structure arc vol_01_arc_01 --title 潜龙初醒）")
     aid = str(raw_aid).strip()
 
-    target_path = bdir / "02_structure" / "arcs" / f"{aid}.md"
+    existing_path = resolve_arc_file(bdir, aid, for_write=False)
     existing_fm: dict[str, Any] = {}
     existing_body = ""
-    if target_path.is_file():
-        existing_fm, existing_body = split_frontmatter(target_path.read_text(encoding="utf-8"))
+    if existing_path.is_file():
+        existing_fm, existing_body = split_frontmatter(existing_path.read_text(encoding="utf-8"))
 
     merged_fm = {**existing_fm, **file_fm, "id": aid}
     if volume_id is not None:
@@ -1159,8 +1627,16 @@ def structure_arc_cmd(
         ),
         "folded_summary": doc.folded_summary,
     }
+    target_path = resolve_arc_file(
+        bdir,
+        doc.id,
+        title=doc.title or "",
+        for_write=True,
+    )
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(_render_frontmatter_md(fm_out, doc.body), encoding="utf-8")
+    if existing_path.is_file() and not existing_path.samefile(target_path):
+        existing_path.unlink(missing_ok=True)
 
     with SqliteIndexer(bdir) as indexer:
         indexer.sync()
@@ -1232,7 +1708,16 @@ def _parse_beat_opts(raw_items: Sequence[str] | None) -> list[Beat]:
     return beats
 
 
-@structure_app.command("blueprint")
+@structure_app.command(
+    "blueprint",
+    epilog=(
+        "示例:\n"
+        "  ddnovel structure blueprint 10 -v vol_01 -t 夜探禁地 -p char_linfan "
+        "-C char_linfan,char_elder\n"
+        "  ddnovel structure blueprint 10 -l loc_forbidden -T 'thread_01:progress' "
+        "-U char_elder -B '入阵:潜入禁地'"
+    ),
+)
 @_cli_guard
 def structure_blueprint_cmd(
     ctx: typer.Context,
@@ -1258,43 +1743,43 @@ def structure_blueprint_cmd(
     ] = None,
     pov: Annotated[
         str | None,
-        typer.Option("--pov", help="本章叙事视角角色 ID（如 char_linfan）"),
+        typer.Option("--pov", "-p", help="本章叙事视角角色 ID（如 char_linfan）"),
     ] = None,
     character: Annotated[
         list[str] | None,
-        typer.Option("--character", "--cast", help="本章出场角色 ID（可多次指定或逗号分隔）"),
+        typer.Option("--character", "--cast", "-C", help="本章出场角色 ID（可多次指定或逗号分隔）"),
     ] = None,
     location: Annotated[
         list[str] | None,
-        typer.Option("--location", help="本章涉及地点 ID（可多次指定或逗号分隔）"),
+        typer.Option("--location", "-l", help="本章涉及地点 ID（可多次指定或逗号分隔）"),
     ] = None,
     faction: Annotated[
         list[str] | None,
-        typer.Option("--faction", help="本章涉及势力 ID（可多次指定或逗号分隔）"),
+        typer.Option("--faction", "-F", help="本章涉及势力 ID（可多次指定或逗号分隔）"),
     ] = None,
     item: Annotated[
         list[str] | None,
-        typer.Option("--item", help="本章涉及物品 ID（可多次指定或逗号分隔）"),
+        typer.Option("--item", "-i", help="本章涉及物品 ID（可多次指定或逗号分隔）"),
     ] = None,
     thread: Annotated[
         list[str] | None,
-        typer.Option("--thread", help="本章指定伏笔动作，格式 'thread_id:plant|progress|resolve'"),
+        typer.Option("--thread", "-T", help="本章指定伏笔动作，格式 'thread_id:plant|progress|resolve'"),
     ] = None,
     unlock_secret: Annotated[
         list[str] | None,
-        typer.Option("--unlock-secret", help="本章解锁 [机密] 的实体 ID"),
+        typer.Option("--unlock-secret", "-U", help="本章解锁 [机密] 的实体 ID"),
     ] = None,
     topic: Annotated[
         list[str] | None,
-        typer.Option("--topic", help="本章挂载的实体专题，格式 'entity_id:专题名'"),
+        typer.Option("--topic", "-O", help="本章挂载的实体专题，格式 'entity_id:专题名'"),
     ] = None,
     forbidden: Annotated[
         list[str] | None,
-        typer.Option("--forbidden", help="本章负向禁止事项红线（可多次指定）"),
+        typer.Option("--forbidden", "-X", help="本章负向禁止事项红线（可多次指定）"),
     ] = None,
     beat: Annotated[
         list[str] | None,
-        typer.Option("--beat", help="本章分场节拍，格式 '节拍标题:节拍内容'（可多次指定）"),
+        typer.Option("--beat", "-B", help="本章分场节拍，格式 '节拍标题:节拍内容'（可多次指定）"),
     ] = None,
     body: Annotated[
         str | None,
@@ -1306,7 +1791,7 @@ def structure_blueprint_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """创建或更新单章分场节拍蓝图 (02_structure/blueprints/vol_XX/ch_XXXX.md)。"""
+    """创建或更新单章分场节拍蓝图 (02_结构/章节蓝图/第XX卷/第XXXX章-<章节标题>.md)。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     cfg = _load_book_config(bdir)
     parser = ProgressiveParser(book_dir=bdir)
@@ -1322,16 +1807,16 @@ def structure_blueprint_cmd(
     if resolved_ch is None or isinstance(resolved_ch, bool) or resolved_ch < 1:
         raise ValueError("必须提供 >= 1 的合法章号（例如: ddnovel structure blueprint 1 --title 首章）")
 
-    ch_stem = format_chapter(resolved_ch, width=cfg.chapter_id_width)
-    existing_bp: BlueprintDoc | None = None
-    existing_path: Path | None = None
-    bp_root = bdir / "02_structure" / "blueprints"
-    if bp_root.is_dir():
-        for p in sorted(bp_root.rglob("*.md")):
-            if p.stem == ch_stem:
-                existing_path = p
-                existing_bp = parser.parse_blueprint_md(p, book_dir=bdir)
-                break
+    existing_path = find_existing_blueprint_file(
+        bdir,
+        resolved_ch,
+        width=cfg.chapter_id_width,
+    )
+    existing_bp = (
+        parser.parse_blueprint_md(existing_path, book_dir=bdir)
+        if existing_path is not None
+        else None
+    )
 
     base = file_bp or existing_bp
     resolved_arc = arc_id if arc_id is not None else (base.arc_id if base is not None else None)
@@ -1433,11 +1918,22 @@ def structure_blueprint_cmd(
         "beats": [b.model_dump(mode="json") for b in bp_doc.beats],
     }
 
-    target_path = bdir / "02_structure" / "blueprints" / (bp_doc.volume_id or "vol_01") / f"{ch_stem}.md"
+    target_path = resolve_blueprint_file(
+        bdir,
+        bp_doc.volume_id or "vol_01",
+        bp_doc.chapter,
+        width=cfg.chapter_id_width,
+        title=bp_doc.title or "",
+        for_write=True,
+    )
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    if existing_path is not None and existing_path.resolve() != target_path.resolve():
-        existing_path.unlink(missing_ok=True)
     target_path.write_text(_render_frontmatter_md(fm_out, bp_doc.body), encoding="utf-8")
+    if (
+        existing_path is not None
+        and existing_path.is_file()
+        and not existing_path.samefile(target_path)
+    ):
+        existing_path.unlink(missing_ok=True)
 
     with SqliteIndexer(bdir) as indexer:
         indexer.sync()
@@ -1463,7 +1959,10 @@ def structure_blueprint_cmd(
 # ---------------------------------------------------------------------------
 
 
-@app.command("radar")
+@app.command(
+    "radar",
+    epilog="示例:\n  ddnovel radar -c 10\n  ddnovel radar -c 10 -e char_linfan,item_gujing -s 15",
+)
 @_cli_guard
 def radar_cmd(
     ctx: typer.Context,
@@ -1477,12 +1976,13 @@ def radar_cmd(
     ] = None,
     stale_threshold: Annotated[
         int | None,
-        typer.Option("--stale-threshold", help="超期未推进断线告警章数阈值"),
+        typer.Option("--stale-threshold", "-s", help="超期未推进断线告警章数阈值"),
     ] = None,
     include_blueprint: Annotated[
         bool,
         typer.Option(
             "--include-blueprint/--no-blueprint",
+            "-B",
             help="未传 --entity 时是否自动提取目标章蓝图出场实体",
         ),
     ] = True,
@@ -1579,7 +2079,7 @@ def packet_build_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """按 U 型注意力曲线与三重物理隔离一步编译单章独立写作包 (04_creation/packets/ch_XXXX_packet.md)。"""
+    """按 U 型注意力曲线与三重物理隔离一步编译单章独立写作包 (04_创作/写作包/第XXXX章_写作包.md)。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     with PacketBuilder(bdir) as builder:
         res = builder.build(chapter_num=chapter, custom_budget=budget)
@@ -1624,18 +2124,11 @@ def _locate_packet_file(book_dir: Path, chapter: int) -> Path:
     if isinstance(chapter, bool) or chapter < 1:
         raise ValueError(f"章号必须为 >= 1 的正整数，收到: {chapter!r}")
     cfg = _load_book_config(book_dir)
-    packets_dir = book_dir / "04_creation" / "packets"
-    ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-    candidates = [
-        packets_dir / f"{ch_prefix}_packet.md",
-        packets_dir / f"ch_{chapter:04d}_packet.md",
-        packets_dir / f"ch_{chapter}_packet.md",
-    ]
-    for cand in candidates:
-        if cand.is_file():
-            return cand
+    pkt_path = resolve_packet_file(book_dir, chapter, width=cfg.chapter_id_width)
+    if pkt_path.is_file():
+        return pkt_path
     raise FileNotFoundError(
-        f"未找到第 {chapter} 章写作包文件 ({packets_dir / f'{ch_prefix}_packet.md'})，"
+        f"未找到第 {chapter} 章写作包文件 ({pkt_path})，"
         f"请先执行 'ddnovel packet build {chapter}'"
     )
 
@@ -1701,7 +2194,7 @@ def draft_save_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """保存单章初稿至 04_creation/drafts/ch_XXXX_draft.md 供作者通篇审改。"""
+    """保存单章初稿至 04_创作/草稿/第XXXX章_草稿.md 供作者通篇审改。"""
     if isinstance(chapter, bool) or chapter < 1:
         raise ValueError(f"章号必须为 >= 1 的正整数，收到: {chapter!r}")
     bdir = _resolve_book_dir(book_dir, ctx)
@@ -1717,8 +2210,7 @@ def draft_save_cmd(
     if resolved_text is None or not resolved_text.strip():
         raise ValueError("草稿内容不能为空，请通过 --content 或 --from-file 提供章节草稿正文")
 
-    ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-    draft_path = bdir / "04_creation" / "drafts" / f"{ch_prefix}_draft.md"
+    draft_path = resolve_draft_file(bdir, chapter, width=cfg.chapter_id_width, for_write=True)
     draft_path.parent.mkdir(parents=True, exist_ok=True)
     clean_text = resolved_text.rstrip() + "\n"
     draft_path.write_text(clean_text, encoding="utf-8")
@@ -1739,16 +2231,10 @@ def _locate_draft_path(book_dir: Path, chapter: int) -> Path:
     if isinstance(chapter, bool) or chapter < 1:
         raise ValueError(f"章号必须为 >= 1 的正整数，收到: {chapter!r}")
     cfg = _load_book_config(book_dir)
-    drafts_dir = book_dir / "04_creation" / "drafts"
-    ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-    for cand in (
-        drafts_dir / f"{ch_prefix}_draft.md",
-        drafts_dir / f"ch_{chapter:04d}_draft.md",
-        drafts_dir / f"ch_{chapter}_draft.md",
-    ):
-        if cand.is_file():
-            return cand
-    raise FileNotFoundError(f"未找到第 {chapter} 章草稿文件: {drafts_dir / f'{ch_prefix}_draft.md'}")
+    draft_path = resolve_draft_file(book_dir, chapter, width=cfg.chapter_id_width)
+    if draft_path.is_file():
+        return draft_path
+    raise FileNotFoundError(f"未找到第 {chapter} 章草稿文件: {draft_path}")
 
 
 @draft_app.command("show")
@@ -1761,7 +2247,7 @@ def draft_show_cmd(
     ],
     book_dir: BookDirOption = None,
 ) -> None:
-    """查阅 04_creation/drafts/ch_XXXX_draft.md 中的整章草稿。"""
+    """查阅 04_创作/草稿/第XXXX章_草稿.md 中的整章草稿。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     draft_path = _locate_draft_path(bdir, chapter)
     text = draft_path.read_text(encoding="utf-8")
@@ -1794,7 +2280,15 @@ def draft_read_cmd(
 # ---------------------------------------------------------------------------
 
 
-@chapter_app.command("promote")
+@chapter_app.command(
+    "promote",
+    epilog=(
+        "示例:\n"
+        "  ddnovel chapter promote 10 -v vol_01          # 审校通过并定稿归档到 vol_01\n"
+        "  ddnovel chapter promote 10 -v vol_01 -S       # 严格模式（有 WARNING 也阻止定稿）\n"
+        "  ddnovel chapter promote 10 -n                 # 仅预览归档路径与过期清理，不写盘"
+    ),
+)
 @_cli_guard
 def chapter_promote_cmd(
     ctx: typer.Context,
@@ -1808,15 +2302,15 @@ def chapter_promote_cmd(
     ] = None,
     no_audit: Annotated[
         bool,
-        typer.Option("--no-audit", help="跳过定稿前静态一致性体检"),
+        typer.Option("--no-audit", "-N", help="跳过定稿前静态一致性体检"),
     ] = False,
     strict: Annotated[
         bool,
-        typer.Option("--strict", help="严格模式：存在任何 WARNING 或 ERROR 均阻止定稿"),
+        typer.Option("--strict", "-S", help="严格模式：存在任何 WARNING 或 ERROR 均阻止定稿"),
     ] = False,
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="仅预览归档路径与待清理超期过程文件，不执行实际写盘"),
+        typer.Option("--dry-run", "-n", help="仅预览归档路径与待清理超期过程文件，不执行实际写盘"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -1856,7 +2350,7 @@ def chapter_promote_cmd(
 
 
 def _infer_volume_for_chapter(book_dir: Path, chapter: int) -> str:
-    bp_root = book_dir / "02_structure" / "blueprints"
+    bp_root = resolve_blueprints_dir(book_dir)
     if bp_root.is_dir():
         parser = ProgressiveParser(book_dir=book_dir)
         for p in sorted(bp_root.rglob("*.md")):
@@ -1956,7 +2450,18 @@ def _parse_relation_specs(
     return rels
 
 
-@state_app.command("update")
+@state_app.command(
+    "update",
+    epilog=(
+        "示例:\n"
+        "  ddnovel state update -c 10 -v vol_01 -s '突破炼气三层' "
+        "-F '击败执事' -F '获得玉简' -F '潜入禁地'\n"
+        "  ddnovel state update -c 10 "
+        "-C '{\"char_linfan\": {\"location\": \"loc_sect\", \"physical_mental\": \"突破\"}}'\n"
+        "  ddnovel state update -c 10 -R 'char_linfan:char_elder:师徒:10' "
+        "-T '{\"id\":\"th_01\",\"title\":\"玉简秘密\",\"status\":\"active\"}'"
+    ),
+)
 @_cli_guard
 def state_update_cmd(
     ctx: typer.Context,
@@ -1966,11 +2471,11 @@ def state_update_cmd(
     ] = None,
     summary: Annotated[
         str | None,
-        typer.Option("--summary", "-s", help="本章百字摘要（写入 history/vol_XX_facts.jsonl）"),
+        typer.Option("--summary", "-s", help="本章百字摘要（写入 03_状态/历史/第XX卷_事实.jsonl）"),
     ] = None,
     fact: Annotated[
         list[str] | None,
-        typer.Option("--fact", help="本章沉淀的原子事实条目（推荐 3~5 条，可多次指定）"),
+        typer.Option("--fact", "-F", help="本章沉淀的原子事实条目（推荐 3~5 条，可多次指定）"),
     ] = None,
     entity: Annotated[
         list[str] | None,
@@ -1986,27 +2491,31 @@ def state_update_cmd(
     ] = None,
     in_world_time: Annotated[
         str | None,
-        typer.Option("--time", "--in-world-time", help="书内时间日历坐标（如 天历三年秋）"),
+        typer.Option("--time", "--in-world-time", "-t", help="书内时间日历坐标（如 天历三年秋）"),
     ] = None,
     macro_situation: Annotated[
         str | None,
-        typer.Option("--macro-situation", help="更新 world_state.yaml 全局天下大势简述"),
+        typer.Option("--macro-situation", "-m", help="更新 世界状态.yaml 全局天下大势简述"),
     ] = None,
     char_state: Annotated[
         list[str] | None,
-        typer.Option("--char-state", help="更新活跃角色状态 JSON/YAML 片段"),
+        typer.Option("--char-state", "-C", help="更新活跃角色状态 JSON/YAML 片段"),
     ] = None,
     faction_state: Annotated[
         list[str] | None,
-        typer.Option("--faction-state", help="更新活跃势力状态 JSON/YAML 片段"),
+        typer.Option("--faction-state", "-G", help="更新活跃势力状态 JSON/YAML 片段"),
     ] = None,
     relation: Annotated[
         list[str] | None,
-        typer.Option("--relation", help="新增或更新双时态关系，格式 'source:target:relation[:from[:to]]'"),
+        typer.Option(
+            "--relation",
+            "-R",
+            help="新增或更新双时态关系，格式 'source:target:relation[:from[:to]]'",
+        ),
     ] = None,
     thread: Annotated[
         list[str] | None,
-        typer.Option("--thread", help="新增或更新伏笔条目 JSON/YAML 片段"),
+        typer.Option("--thread", "-T", help="新增或更新伏笔条目 JSON/YAML 片段"),
     ] = None,
     from_file: Annotated[
         Path | None,
@@ -2014,7 +2523,7 @@ def state_update_cmd(
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """沉淀单章百字摘要与原子事实 (vol_XX_facts.jsonl)，并覆写最新角色/势力/世界/关系/伏笔截面状态。"""
+    """沉淀单章百字摘要与原子事实 (第XX卷_事实.jsonl)，并覆写最新角色/势力/世界/关系/伏笔截面状态。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     cfg = _load_book_config(bdir)
     val_ctx = {"genre_profile": cfg.genre_profile}
@@ -2075,13 +2584,13 @@ def state_update_cmd(
             facts=list(resolved_facts),
             entities=list(resolved_entities or []),
         )
-        hist_path = bdir / "03_state" / "history" / f"{vol_id}_facts.jsonl"
+        hist_path = resolve_facts_file(bdir, vol_id, for_write=True)
         _upsert_chapter_fact_jsonl(hist_path, fact_rec)
         updated_files.append(hist_path.relative_to(bdir).as_posix())
 
-    # 2. 更新 world_state.yaml
+    # 2. 更新 世界状态.yaml (兼容 world_state.yaml)
     if resolved_ch is not None or resolved_time is not None or resolved_macro is not None:
-        ws_path = bdir / "03_state" / "world_state.yaml"
+        ws_path = resolve_world_state_file(bdir, for_write=True)
         raw_ws = yaml.safe_load(ws_path.read_text(encoding="utf-8")) if ws_path.is_file() else {}
         ws_obj = WorldState.model_validate(raw_ws if isinstance(raw_ws, dict) else {})
         ws_updates: dict[str, Any] = {}
@@ -2100,12 +2609,12 @@ def state_update_cmd(
             )
             updated_files.append(ws_path.relative_to(bdir).as_posix())
 
-    # 3. 更新 active/characters.yaml（含冷库唤醒）
+    # 3. 更新 人物状态.yaml（含冷库唤醒）
     char_updates = _parse_structured_kv_or_mapping(char_state)
     if isinstance(payload.get("characters"), dict):
         char_updates.update(payload["characters"])
     if char_updates:
-        chars_path = bdir / "03_state" / "active" / "characters.yaml"
+        chars_path = resolve_active_characters_file(bdir, for_write=True)
         raw_chars = (
             yaml.safe_load(chars_path.read_text(encoding="utf-8"))
             if chars_path.is_file()
@@ -2117,7 +2626,7 @@ def state_update_cmd(
         )
         merged_chars = dict(cf.root)
 
-        arch_chars_path = bdir / "03_state" / "archive" / "characters.yaml"
+        arch_chars_path = resolve_archive_characters_file(bdir, for_write=True)
         raw_arch_chars = (
             yaml.safe_load(arch_chars_path.read_text(encoding="utf-8"))
             if arch_chars_path.is_file()
@@ -2170,12 +2679,12 @@ def state_update_cmd(
             )
             updated_files.append(arch_chars_path.relative_to(bdir).as_posix())
 
-    # 4. 更新 active/factions.yaml（含冷库唤醒）
+    # 4. 更新 势力状态.yaml（含冷库唤醒）
     fac_updates = _parse_structured_kv_or_mapping(faction_state)
     if isinstance(payload.get("factions"), dict):
         fac_updates.update(payload["factions"])
     if fac_updates:
-        facs_path = bdir / "03_state" / "active" / "factions.yaml"
+        facs_path = resolve_active_factions_file(bdir, for_write=True)
         raw_facs = (
             yaml.safe_load(facs_path.read_text(encoding="utf-8"))
             if facs_path.is_file()
@@ -2187,7 +2696,7 @@ def state_update_cmd(
         )
         merged_facs = dict(ff.root)
 
-        arch_facs_path = bdir / "03_state" / "archive" / "factions.yaml"
+        arch_facs_path = resolve_archive_factions_file(bdir, for_write=True)
         raw_arch_facs = (
             yaml.safe_load(arch_facs_path.read_text(encoding="utf-8"))
             if arch_facs_path.is_file()
@@ -2246,7 +2755,7 @@ def state_update_cmd(
     if isinstance(payload.get("relations"), list):
         rel_updates.extend(TemporalRelation.model_validate(r) for r in payload["relations"])
     if rel_updates:
-        rels_path = bdir / "03_state" / "relations.yaml"
+        rels_path = resolve_relations_file(bdir, for_write=True)
         raw_rels = (
             yaml.safe_load(rels_path.read_text(encoding="utf-8"))
             if rels_path.is_file()
@@ -2290,7 +2799,7 @@ def state_update_cmd(
     if isinstance(payload.get("threads"), list):
         thr_updates.extend(Thread.model_validate(t) for t in payload["threads"])
     if thr_updates:
-        thrs_path = bdir / "03_state" / "threads.yaml"
+        thrs_path = resolve_threads_file(bdir, for_write=True)
         raw_thrs = (
             yaml.safe_load(thrs_path.read_text(encoding="utf-8"))
             if thrs_path.is_file()
@@ -2331,23 +2840,69 @@ def state_update_cmd(
     )
 
 
-@state_app.command("record-outcome")
+@state_app.command(
+    "record-outcome",
+    epilog=(
+        "提示: 本命令为 state update 的同义命令，参数与用法完全一致；"
+        "可运行 ddnovel state update -h 查看完整示例。"
+    ),
+)
 @_cli_guard
 def state_record_outcome_cmd(
     ctx: typer.Context,
-    chapter: Annotated[int | None, typer.Option("--chapter", "-c", help="结算章节号")] = None,
-    summary: Annotated[str | None, typer.Option("--summary", "-s", help="本章百字摘要")] = None,
-    fact: Annotated[list[str] | None, typer.Option("--fact", help="原子事实条目")] = None,
-    entity: Annotated[list[str] | None, typer.Option("--entity", "-e", help="涉及实体 ID")] = None,
-    volume_id: Annotated[str | None, typer.Option("--volume-id", "-v", help="所属分卷 ID")] = None,
-    arc_id: Annotated[str | None, typer.Option("--arc-id", "-a", help="所属单元 ID")] = None,
-    in_world_time: Annotated[str | None, typer.Option("--time", "--in-world-time", help="书内时间")] = None,
-    macro_situation: Annotated[str | None, typer.Option("--macro-situation", help="全局天下大势")] = None,
-    char_state: Annotated[list[str] | None, typer.Option("--char-state", help="角色状态更新")] = None,
-    faction_state: Annotated[list[str] | None, typer.Option("--faction-state", help="势力状态更新")] = None,
-    relation: Annotated[list[str] | None, typer.Option("--relation", help="双时态关系更新")] = None,
-    thread: Annotated[list[str] | None, typer.Option("--thread", help="伏笔更新")] = None,
-    from_file: Annotated[Path | None, typer.Option("--from-file", "-f", help="从文件导入更新")] = None,
+    chapter: Annotated[int | None, typer.Option("--chapter", "-c", help="结算章节号（正整数）")] = None,
+    summary: Annotated[
+        str | None,
+        typer.Option("--summary", "-s", help="本章百字摘要（写入 03_状态/历史/第XX卷_事实.jsonl）"),
+    ] = None,
+    fact: Annotated[
+        list[str] | None,
+        typer.Option("--fact", "-F", help="本章沉淀的原子事实条目（推荐 3~5 条，可多次指定）"),
+    ] = None,
+    entity: Annotated[
+        list[str] | None,
+        typer.Option("--entity", "-e", help="本章事实涉及的实体 ID（可多次指定或逗号分隔）"),
+    ] = None,
+    volume_id: Annotated[
+        str | None,
+        typer.Option("--volume-id", "-v", help="所属分卷 ID（如 vol_01）"),
+    ] = None,
+    arc_id: Annotated[
+        str | None,
+        typer.Option("--arc-id", "-a", help="所属剧情单元 ID（如 vol_01_arc_01）"),
+    ] = None,
+    in_world_time: Annotated[
+        str | None,
+        typer.Option("--time", "--in-world-time", "-t", help="书内时间日历坐标（如 天历三年秋）"),
+    ] = None,
+    macro_situation: Annotated[
+        str | None,
+        typer.Option("--macro-situation", "-m", help="更新 世界状态.yaml 全局天下大势简述"),
+    ] = None,
+    char_state: Annotated[
+        list[str] | None,
+        typer.Option("--char-state", "-C", help="更新活跃角色状态 JSON/YAML 片段"),
+    ] = None,
+    faction_state: Annotated[
+        list[str] | None,
+        typer.Option("--faction-state", "-G", help="更新活跃势力状态 JSON/YAML 片段"),
+    ] = None,
+    relation: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--relation",
+            "-R",
+            help="新增或更新双时态关系，格式 'source:target:relation[:from[:to]]'",
+        ),
+    ] = None,
+    thread: Annotated[
+        list[str] | None,
+        typer.Option("--thread", "-T", help="新增或更新伏笔条目 JSON/YAML 片段"),
+    ] = None,
+    from_file: Annotated[
+        Path | None,
+        typer.Option("--from-file", "-f", help="从 JSON/YAML 结算文件批量导入本章状态与事实更新"),
+    ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
     """沉淀单章摘要与原子事实并更新状态截面（state update 的同义命令）。"""
@@ -2445,29 +3000,36 @@ def state_inspect_cmd(
     console.print(rel_table)
 
 
-@state_app.command("gc")
+@state_app.command(
+    "gc",
+    epilog=(
+        "示例:\n"
+        "  ddnovel state gc -c 80 -n        # 仅预览待移入 archive/ 冷库的角色/势力/关系/伏笔\n"
+        "  ddnovel state gc -c 80 -y -a 30   # 确认执行归档（超过 30 章未出场转冷库）"
+    ),
+)
 @_cli_guard
 def state_gc_cmd(
     ctx: typer.Context,
     chapter: Annotated[
         int | None,
-        typer.Option("--chapter", "-c", help="当前结算章号（默认取 novel.yaml 中的 current_chapter）"),
+        typer.Option("--chapter", "-c", help="当前结算章号（默认取小说配置文件中的 current_chapter）"),
     ] = None,
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="仅预览待移入 archive/ 冷库的条目，不修改磁盘文件"),
+        typer.Option("--dry-run", "-n", help="仅预览待移入 archive/ 冷库的条目，不修改磁盘文件"),
     ] = False,
     apply: Annotated[
         bool,
-        typer.Option("--apply", help="确认执行冷库归档写盘并刷新索引"),
+        typer.Option("--apply", "-y", help="确认执行冷库归档写盘并刷新索引"),
     ] = False,
     cold_after: Annotated[
         int | None,
-        typer.Option("--cold-after", help="连续未出场章数超期归档阈值"),
+        typer.Option("--cold-after", "-a", help="连续未出场章数超期归档阈值"),
     ] = None,
     book_dir: BookDirOption = None,
 ) -> None:
-    """将已死亡/退场/超期未出场实体、已失效关系边与已填完伏笔移入 03_state/archive/ 冷库。"""
+    """将已死亡/退场/超期未出场实体、已失效关系边与已填完伏笔移入 03_状态/归档/ 冷库。"""
     bdir = _resolve_book_dir(book_dir, ctx)
     effective_dry_run = bool(dry_run and not apply)
     with LifecycleManager(bdir) as lm:
@@ -2564,7 +3126,10 @@ def index_rebuild_cmd(
     )
 
 
-@app.command("search")
+@app.command(
+    "search",
+    epilog="示例:\n  ddnovel search 林凡 -s setting -k 10\n  ddnovel search 密钥线索 -H",
+)
 @_cli_guard
 def search_cmd(
     ctx: typer.Context,
@@ -2586,7 +3151,7 @@ def search_cmd(
     ] = 20,
     hybrid: Annotated[
         bool,
-        typer.Option("--hybrid", help="若已启用向量插件则执行 BM25 + Cosine RRF 混合重排"),
+        typer.Option("--hybrid", "-H", help="若已启用向量插件则执行 BM25 + Cosine RRF 混合重排"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -2627,7 +3192,14 @@ def search_cmd(
 # ---------------------------------------------------------------------------
 
 
-@thread_app.command("drop")
+@thread_app.command(
+    "drop",
+    epilog=(
+        "示例:\n"
+        "  ddnovel thread drop thread_side_01 -n   # 预览前文引用\n"
+        "  ddnovel thread drop thread_side_01      # 确认弃坑并从台账移除"
+    ),
+)
 @_cli_guard
 def thread_drop_cmd(
     ctx: typer.Context,
@@ -2637,7 +3209,7 @@ def thread_drop_cmd(
     ],
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="仅预检前文提及影响面，不实际从 threads.yaml 删除"),
+        typer.Option("--dry-run", "-n", help="仅预检前文提及影响面，不实际从伏笔台账中删除"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -2719,7 +3291,10 @@ def thread_list_cmd(
     console.print(table)
 
 
-@history_app.command("compact")
+@history_app.command(
+    "compact",
+    epilog="示例:\n  ddnovel history compact vol_01 -n\n  ddnovel history compact vol_01 -f milestones.jsonl",
+)
 @_cli_guard
 def history_compact_cmd(
     ctx: typer.Context,
@@ -2741,7 +3316,7 @@ def history_compact_cmd(
     ] = None,
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="仅预览浓缩前后条数对比，不覆写 jsonl 文件"),
+        typer.Option("--dry-run", "-n", help="仅预览浓缩前后条数对比，不覆写 jsonl 文件"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:
@@ -2838,7 +3413,14 @@ def _render_audit_report(report: Any) -> None:
         console.print(table)
 
 
-@app.command("audit")
+@app.command(
+    "audit",
+    epilog=(
+        "示例:\n"
+        "  ddnovel audit 10 -S   # 体检第 10 章（严格模式，有 WARNING 也返回退出码 1）\n"
+        "  ddnovel audit         # 执行全书静态一致性体检"
+    ),
+)
 @_cli_guard
 def audit_cmd(
     ctx: typer.Context,
@@ -2852,7 +3434,7 @@ def audit_cmd(
     ] = None,
     strict: Annotated[
         bool,
-        typer.Option("--strict", help="严格门禁：若体检未通过或存在告警则返回退出码 1"),
+        typer.Option("--strict", "-S", help="严格门禁：若体检未通过或存在告警则返回退出码 1"),
     ] = False,
     book_dir: BookDirOption = None,
 ) -> None:

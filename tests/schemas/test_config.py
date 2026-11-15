@@ -137,13 +137,13 @@ def test_hosts_deduplication_preserves_order():
     """hosts 列表自动去重并保持首次出现顺序，同时拒绝非法宿主名。"""
     cfg = NovelConfig(
         title="多宿主测试",
-        hosts=["claude", "opencode", "claude", HostKind.DSH, "opencode"],  # type: ignore[list-item]
+        hosts=["claude", "opencode", "claude", HostKind.DSH, "antigravity", "opencode"],  # type: ignore[list-item]
     )
-    assert cfg.hosts == [HostKind.CLAUDE, HostKind.OPENCODE, HostKind.DSH]
+    assert cfg.hosts == [HostKind.CLAUDE, HostKind.OPENCODE, HostKind.DSH, HostKind.ANTIGRAVITY]
 
     # 属性赋值同样去重保序
-    cfg.hosts = [HostKind.DSH, HostKind.DSH, HostKind.CLAUDE]
-    assert cfg.hosts == [HostKind.DSH, HostKind.CLAUDE]
+    cfg.hosts = [HostKind.ANTIGRAVITY, HostKind.DSH, HostKind.DSH, HostKind.CLAUDE]
+    assert cfg.hosts == [HostKind.ANTIGRAVITY, HostKind.DSH, HostKind.CLAUDE]
 
     with pytest.raises(ValidationError):
         NovelConfig(title="非法宿主", hosts=["cursor"])  # type: ignore[list-item]

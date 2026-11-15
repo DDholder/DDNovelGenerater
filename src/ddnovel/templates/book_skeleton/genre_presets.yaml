@@ -1,7 +1,7 @@
 general:
   premise: "立足当代现实与职场博弈，围绕理想坚守、利益冲突与人性抉择展开长线叙事。"
   settings:
-    - path: "01_settings/world/world_overview.md"
+    - path: "01_设定集/世界观/world_overview-现代都市行业生态.md"
       id: "world_overview"
       name: "现代都市行业生态"
       aliases:
@@ -15,7 +15,7 @@ general:
       topic_name: "行业潜规则"
       topic_text: "招投标与项目评审讲究合规留痕与可验证交付，越是关键节点越需防范口头承诺。"
       secret_text: "表面看似平稳的行业秩序下，旧派巨头与新锐力量已围绕核心标准争夺暗流涌动。"
-    - path: "01_settings/geography/loc_starter_stage.md"
+    - path: "01_设定集/地理/loc_starter_stage-滨海高新区创研园.md"
       id: "loc_starter_stage"
       name: "滨海高新区创研园"
       aliases:
@@ -28,7 +28,7 @@ general:
       topic_name: "园区夜间动线"
       topic_text: "晚十点后只保留东门刷卡通道，地下一层档案室与机房共用备用供电回路。"
       secret_text: "创研园三期老厂房地下仍保留着十年前某研究所撤离时封存的旧测试管廊。"
-    - path: "01_settings/factions/fac_main_org.md"
+    - path: "01_设定集/势力/fac_main_org-启明项目组.md"
       id: "fac_main_org"
       name: "启明项目组"
       aliases:
@@ -41,7 +41,7 @@ general:
       topic_name: "内部协作机制"
       topic_text: "每周五晚进行全量进度复盘，关键数据与合同底稿实行双人交叉复核。"
       secret_text: "项目组早年签署过一份附带隐性回购条款的种子轮补充协议，目前仅少数核心知情。"
-    - path: "01_settings/characters/char_protagonist.md"
+    - path: "01_设定集/人物/char_protagonist-陆沉.md"
       id: "char_protagonist"
       name: "陆沉"
       aliases:
@@ -54,7 +54,7 @@ general:
       topic_name: "决断习惯"
       topic_text: "面对突发危机时，陆沉会先核对时间线与可验证事实，再在纸面列出三条备选退路。"
       secret_text: "陆沉三年前主动离开原大厂，实为调查导师当年离奇撤项的真正内幕。"
-    - path: "01_settings/items/item_key_token.md"
+    - path: "01_设定集/器物/item_key_token-加密银色移动盘.md"
       id: "item_key_token"
       name: "加密银色移动盘"
       aliases:
@@ -188,7 +188,7 @@ general:
 cultivation_rpg:
   premise: "以境界秩序、宗门博弈与因果宿怨为核心，写实刻画主角于灵气潮汐与人心险恶中步步破境求存。"
   settings:
-    - path: "01_settings/world/world_overview.md"
+    - path: "01_设定集/世界观/world_overview-苍冥修真界.md"
       id: "world_overview"
       name: "苍冥修真界"
       aliases:
@@ -202,7 +202,7 @@ cultivation_rpg:
       topic_name: "境界与灵脉法则"
       topic_text: "炼气、筑基、金丹、元婴四境森严，灵气稀薄之地强行冲击大境极易导致气海反噬。"
       secret_text: "每隔三百年的天象异动实为上古大阵吸纳天地灵机的余波，而非单纯天灾。"
-    - path: "01_settings/geography/loc_starter_stage.md"
+    - path: "01_设定集/地理/loc_starter_stage-青岚山外门药庐.md"
       id: "loc_starter_stage"
       name: "青岚山外门药庐"
       aliases:
@@ -215,7 +215,7 @@ cultivation_rpg:
       topic_name: "后山古阵残迹"
       topic_text: "药庐后崖半里处有一座早已被宗门废弃的残破聚灵阵台，月晦之夜偶有微弱灵纹闪动。"
       secret_text: "残破阵台之下镇压着一枚与上古剑修传承相关的无主阵眼。"
-    - path: "01_settings/factions/fac_main_org.md"
+    - path: "01_设定集/势力/fac_main_org-青岚宗.md"
       id: "fac_main_org"
       name: "青岚宗"
       aliases:
@@ -228,7 +228,7 @@ cultivation_rpg:
       topic_name: "外门大比制度"
       topic_text: "每三年举行一次外门小比，前十名可入内门秘阁择取一道中品筑基辅助功法。"
       secret_text: "掌门一脉与执法堂长老之间因百年前秘境旧案早已面和心不合。"
-    - path: "01_settings/characters/char_protagonist.md"
+    - path: "01_设定集/人物/char_protagonist-顾青.md"
       id: "char_protagonist"
       name: "顾青"
       aliases:
@@ -242,7 +242,7 @@ cultivation_rpg:
       topic_name: "战斗与藏拙习惯"
       topic_text: "与人交手前习惯先留三分真气护住心脉，不到生死关头绝不显露压箱底身法。"
       secret_text: "顾青幼年随身携带的残缺木牌实为上古剑宗接引信物，能够隐约共鸣纯正剑意。"
-    - path: "01_settings/items/item_key_token.md"
+    - path: "01_设定集/器物/item_key_token-裂纹玄铁令牌.md"
       id: "item_key_token"
       name: "裂纹玄铁令牌"
       aliases:
@@ -383,7 +383,7 @@ cultivation_rpg:
 mystery_intrigue:
   premise: "围绕多层伪装、情报甄别与时间线推理，在暗流涌动的迷局中层层剥茧。"
   settings:
-    - path: "01_settings/world/world_overview.md"
+    - path: "01_设定集/世界观/world_overview-民国雾城情报暗战网.md"
       id: "world_overview"
       name: "民国雾城情报暗战网"
       aliases:
@@ -397,7 +397,7 @@ mystery_intrigue:
       topic_name: "单线联络铁律"
       topic_text: "地下情报节点彼此互不知晓真实身份，全部依靠预设暗号、报刊夹缝广告与死信箱传递消息。"
       secret_text: "雾城水路转运站内其实还潜伏着一条未被任何一方备案的第三方独立线。"
-    - path: "01_settings/geography/loc_starter_stage.md"
+    - path: "01_设定集/地理/loc_starter_stage-钟楼街老邮局.md"
       id: "loc_starter_stage"
       name: "钟楼街老邮局"
       aliases:
@@ -410,7 +410,7 @@ mystery_intrigue:
       topic_name: "二楼分拣室死角"
       topic_text: "楼梯转角百叶窗正对对面咖啡馆二楼卡座，适合在取信同时观察街头盯梢动向。"
       secret_text: "地下储藏室第三排铁皮信箱暗格可直通后巷排水涵道。"
-    - path: "01_settings/factions/fac_main_org.md"
+    - path: "01_设定集/势力/fac_main_org-雾城特别调查科.md"
       id: "fac_main_org"
       name: "雾城特别调查科"
       aliases:
@@ -423,7 +423,7 @@ mystery_intrigue:
       topic_name: "档案调阅审批"
       topic_text: "凡涉密卷宗均须科长与值班文书双签方能出库，且每次调阅均会在火漆登记簿留痕。"
       secret_text: "调查科档案室半年前一场微不足道的小火，实为有人刻意销毁一份边境通行证存根。"
-    - path: "01_settings/characters/char_protagonist.md"
+    - path: "01_设定集/人物/char_protagonist-沈砚.md"
       id: "char_protagonist"
       name: "沈砚"
       aliases:
@@ -437,7 +437,7 @@ mystery_intrigue:
       topic_name: "反侦察复盘法"
       topic_text: "每次会面结束后，沈砚会默数三步观察玻璃橱窗倒影，借以确认身后是否存在交叉尾随。"
       secret_text: "沈砚暗中保管着失踪兄长留下的半页加密译码本，入职调查科只为顺藤摸瓜找出当晚真相。"
-    - path: "01_settings/items/item_key_token.md"
+    - path: "01_设定集/器物/item_key_token-黄铜停表.md"
       id: "item_key_token"
       name: "黄铜停表"
       aliases:

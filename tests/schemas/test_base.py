@@ -255,7 +255,7 @@ def test_public_enums_and_prefix_mapping():
     assert "dropped" not in set(ThreadStatus)
     assert set(ThreadAction) == {"plant", "progress", "resolve"}
     assert set(FtsScope) == {"setting", "fact", "summary", "manuscript", "blueprint"}
-    assert set(HostKind) == {"opencode", "dsh", "claude"}
+    assert set(HostKind) == {"opencode", "dsh", "claude", "antigravity"}
     assert set(IssueLevel) == {"info", "warning", "error"}
 
     assert ID_PREFIX_CATEGORY == {

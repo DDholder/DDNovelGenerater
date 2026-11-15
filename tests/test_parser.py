@@ -1262,4 +1262,146 @@ status: dead
     assert doc4.status == EntityStatus.DECEASED
 
 
+def test_parse_freeform_id_and_name_filenames_without_frontmatter_or_h1(tmp_path: Path) -> None:
+    doc1 = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_0001-林凡.md",
+        content="## [核心]\n外门少年。\n",
+    )
+    assert doc1.id == "char_0001"
+    assert doc1.name == "林凡"
+
+    doc2 = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "ch-0001-苏瑶.md",
+        content="## [核心]\n药庐师妹。\n",
+    )
+    assert doc2.id == "ch_0001"
+    assert doc2.name == "苏瑶"
+
+    bp = parse_blueprint_md(
+        tmp_path / "02_结构" / "章节蓝图" / "第01卷" / "第0002章-深夜来电.md",
+        content="### 节拍 1：接听电话\n电话那头传来杂音。\n",
+    )
+    assert bp.chapter == 2
+    assert bp.title == "深夜来电"
+
+
+def test_two_layer_strips_html_comments_and_author_note_sections_respecting_fences(
+    tmp_path: Path,
+) -> None:
+    """验证设定卡中的代码块外 HTML 注释与 [作者备忘]/[随笔] 区块会被自动剥离丢弃。"""
+    from ddnovel.core.parser import parse_setting_md, split_progressive_blocks
+
+    raw_body = """## [核心]
+表面冷静的帝国战术指挥官。<!-- 内部随笔：记得第5章写她喝黑咖啡 -->
+
+```markdown
+<!-- code-fence comment must stay -->
+```
+
+## [作者备忘]
+这段临时脑洞台词不应该进核心切片。
+
+## [专题: 战术素养]
+擅长铁道线伏击与补给线切断。<!-- 专题注释应剥离 -->
+
+## [随笔]
+深夜草稿随笔碎片，仅供作者参考。
+
+## [机密]
+实际持有旧纪元主控密钥。<!-- 机密注释应剥离 -->
+"""
+    blocks = split_progressive_blocks(raw_body)
+    assert "内部随笔" not in blocks.core
+    assert "这段临时脑洞" not in blocks.core
+    assert "深夜草稿随笔" not in blocks.core
+    assert "<!-- code-fence comment must stay -->" in blocks.core
+    assert "专题注释应剥离" not in blocks.topics["战术素养"]
+    assert blocks.secret is not None
+    assert "机密注释应剥离" not in blocks.secret
+
+    doc = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_0001-林风.md",
+        content=f"---\nid: char_0001\nname: 林风\ncategory: character\n---\n{raw_body}",
+        book_dir=tmp_path,
+    )
+    assert "这段临时脑洞" not in doc.core_text
+    assert "深夜草稿随笔" not in doc.core_text
+    assert "作者备忘" not in doc.topics
+    assert "随笔" not in doc.topics
+
+
+def test_lint_model_setting_doc_flags_concrete_leaks_and_passes_clean_cards(
+    tmp_path: Path,
+) -> None:
+    """验证模型侧设定卡抽象层检测能命中具象台词/场景/动作清单/过长膨胀，且纯净卡零告警。"""
+    from ddnovel.core.parser import lint_model_setting_doc, parse_setting_md
+
+    clean_doc = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_clean-沈砚.md",
+        content=(
+            "---\n"
+            "id: char_clean\n"
+            "name: 沈砚\n"
+            "category: character\n"
+            "---\n"
+            "## [核心]\n"
+            "- 外貌特征：黑发短裁，右眉骨有一道旧疤，着深灰风衣。\n"
+            "- 性格机制：防御型理性主义者，习惯在情绪波动前先收集信息并评估退路，"
+            "面对信任之人时语言克制但会以实际资源让渡表达庇护。\n"
+            "- 能力边界：擅长近距脉冲刃对抗，但心智过载超过三十秒会引发视觉短暂盲区。\n\n"
+            "## [机密]\n"
+            "幼年曾接受过帝国零号实验室的神经重置。\n"
+        ),
+        book_dir=tmp_path,
+    )
+    assert lint_model_setting_doc(clean_doc) == []
+
+    leaky_doc = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_leaky-苏玥.md",
+        content=(
+            "---\n"
+            "id: char_leaky\n"
+            "name: 苏玥\n"
+            "category: character\n"
+            "---\n"
+            "## [核心]\n"
+            "常见小动作清单：每次紧张时必先撩耳边碎发再轻咳两声。\n"
+            "台词例句：“哼，别以为我是在担心你！你要是敢死在外面，我可不会去收尸！”\n"
+            "有一次她曾独自站在天台雨夜里对妹妹说“过来吧”。\n"
+        ),
+        book_dir=tmp_path,
+    )
+    warnings = lint_model_setting_doc(leaky_doc)
+    assert len(warnings) >= 3
+
+    secret_leaky_doc = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_secret_leak-赫尔.md",
+        content=(
+            "---\n"
+            "id: char_secret_leak\n"
+            "name: 赫尔\n"
+            "category: character\n"
+            "---\n"
+            "## [核心]\n"
+            "无实体的专属伴生AI。\n\n"
+            "## [机密]\n"
+            "- 独白样本：“主人，我也好想触碰您冰凉的手背，闻一闻您身上的味道啊……”\n"
+        ),
+        book_dir=tmp_path,
+    )
+    secret_warnings = lint_model_setting_doc(secret_leaky_doc)
+    assert any("[机密]" in w and "独白样本" in w for w in secret_warnings)
+    assert any("[机密]" in w and "对白" in w for w in secret_warnings)
+
+    bloated_text = "这是一条非常冗长的未蒸馏设定描述段落，用来模拟把千字原稿直接塞进核心区的膨胀现象。" * 45
+    bloated_doc = parse_setting_md(
+        tmp_path / "01_设定集" / "人物" / "char_bloat-陈沉.md",
+        content=f"---\nid: char_bloat\nname: 陈沉\ncategory: character\n---\n## [核心]\n{bloated_text}\n",
+        book_dir=tmp_path,
+    )
+    bloat_warnings = lint_model_setting_doc(bloated_doc)
+    assert any("Token" in w or "tokens" in w.lower() for w in bloat_warnings)
+
+
+
 

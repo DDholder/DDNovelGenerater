@@ -50,6 +50,7 @@ def test_cli_version_and_help() -> None:
     assert help_res.exit_code == 0
     for cmd_name in (
         "init",
+        "host",
         "setting",
         "structure",
         "radar",
@@ -69,7 +70,7 @@ def test_cli_version_and_help() -> None:
 def test_cli_init_command_options_and_duplicate_guard(tmp_path: Path) -> None:
     book_dir = tmp_path / "my_novel"
     res = _init_sample_book(book_dir, genre="cultivation_rpg")
-    assert (res / "novel.yaml").is_file()
+    assert (res / "小说配置.yaml").is_file()
     assert (res / "opencode.json").is_file()
     assert (res / ".dsh" / "cordis.mcp.patch.yml").is_file()
     assert (res / ".mcp.json").is_file()
@@ -86,8 +87,8 @@ def test_cli_init_command_options_and_duplicate_guard(tmp_path: Path) -> None:
         ["init", str(empty_book), "--genre", "mystery_intrigue", "--no-samples", "--force"],
     )
     assert force_res.exit_code == 0, force_res.output
-    assert (empty_book / "novel.yaml").is_file()
-    assert list((empty_book / "01_settings" / "characters").glob("*.md")) == []
+    assert (empty_book / "小说配置.yaml").is_file()
+    assert list((empty_book / "01_设定集" / "人物").glob("*.md")) == []
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,7 @@ def test_cli_setting_upsert_list_show_impact_and_prune(tmp_path: Path) -> None:
     )
     assert upsert_res.exit_code == 0, upsert_res.output
     assert "char_suyao" in upsert_res.output
-    suyao_path = book_dir / "01_settings" / "characters" / "char_suyao.md"
+    suyao_path = book_dir / "01_设定集" / "人物" / "char_suyao-苏瑶.md"
     assert suyao_path.is_file()
 
     # 2) setting upsert 增量更新既有卡片（保留原有未传字段）
@@ -154,7 +155,7 @@ def test_cli_setting_upsert_list_show_impact_and_prune(tmp_path: Path) -> None:
         ["setting", "upsert", "--from-file", str(ext_md), "-d", str(book_dir)],
     )
     assert from_file_res.exit_code == 0, from_file_res.output
-    assert (book_dir / "01_settings" / "items" / "item_orphan_bell.md").is_file()
+    assert (book_dir / "01_设定集" / "器物" / "item_orphan_bell-废案铜铃.md").is_file()
 
     # 4) setting list 列表与分类过滤
     list_res = runner.invoke(
@@ -198,14 +199,14 @@ def test_cli_setting_upsert_list_show_impact_and_prune(tmp_path: Path) -> None:
     prune_dry = runner.invoke(app, ["setting", "prune", "-d", str(book_dir)])
     assert prune_dry.exit_code == 0, prune_dry.output
     assert "item_orphan_bell" in prune_dry.output
-    assert (book_dir / "01_settings" / "items" / "item_orphan_bell.md").is_file()
+    assert (book_dir / "01_设定集" / "器物" / "item_orphan_bell-废案铜铃.md").is_file()
 
     prune_apply = runner.invoke(
         app,
         ["setting", "prune", "item_orphan_bell", "--apply", "-d", str(book_dir)],
     )
     assert prune_apply.exit_code == 0, prune_apply.output
-    assert not (book_dir / "01_settings" / "items" / "item_orphan_bell.md").exists()
+    assert not (book_dir / "01_设定集" / "器物" / "item_orphan_bell-废案铜铃.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +296,7 @@ def test_cli_structure_radar_packet_and_draft_workflow(tmp_path: Path, monkeypat
         ],
     )
     assert bp_res.exit_code == 0, bp_res.output
-    assert (book_dir / "02_structure" / "blueprints" / "vol_01" / "ch_0002.md").is_file()
+    assert (book_dir / "02_结构" / "章节蓝图" / "第01卷" / "第0002章-外门执事的试探.md").is_file()
 
     # 4) radar 伏笔雷达巡检
     radar_res = runner.invoke(
@@ -310,8 +311,8 @@ def test_cli_structure_radar_packet_and_draft_workflow(tmp_path: Path, monkeypat
     pkt_build = runner.invoke(app, ["packet", "build", "1", "--budget", "6000"])
     assert pkt_build.exit_code == 0, pkt_build.output
     assert "guardrails" in pkt_build.output
-    assert "ch_0001_packet.md" in pkt_build.output
-    assert (book_dir / "04_creation" / "packets" / "ch_0001_packet.md").is_file()
+    assert "第0001章_写作包.md" in pkt_build.output
+    assert (book_dir / "04_创作" / "写作包" / "第0001章_写作包.md").is_file()
 
     pkt_show = runner.invoke(app, ["packet", "show", "1"])
     assert pkt_show.exit_code == 0, pkt_show.output
@@ -332,7 +333,7 @@ def test_cli_structure_radar_packet_and_draft_workflow(tmp_path: Path, monkeypat
         ],
     )
     assert draft_save.exit_code == 0, draft_save.output
-    assert (book_dir / "04_creation" / "drafts" / "ch_0001_draft.md").is_file()
+    assert (book_dir / "04_创作" / "草稿" / "第0001章_草稿.md").is_file()
 
     draft_show = runner.invoke(app, ["draft", "show", "1"])
     assert draft_show.exit_code == 0, draft_show.output
@@ -345,7 +346,7 @@ def test_cli_structure_radar_packet_and_draft_workflow(tmp_path: Path, monkeypat
         ["draft", "save", "2", "--from-file", str(draft_file)],
     )
     assert draft_save_file.exit_code == 0, draft_save_file.output
-    assert (book_dir / "04_creation" / "drafts" / "ch_0002_draft.md").is_file()
+    assert (book_dir / "04_创作" / "草稿" / "第0002章_草稿.md").is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -377,11 +378,11 @@ def test_cli_promote_state_index_search_thread_history_and_audit(tmp_path: Path)
     # chapter promote 第 1 章（dry-run 与正式入库）
     prom_dry = runner.invoke(app, ["chapter", "promote", "1", "--dry-run", "-d", str(book_dir)])
     assert prom_dry.exit_code == 0, prom_dry.output
-    assert not (book_dir / "04_creation" / "manuscript" / "vol_01" / "ch_0001.md").exists()
+    assert not (book_dir / "04_创作" / "定稿" / "第01卷" / "第0001章-深夜来电.md").exists()
 
     prom_ok = runner.invoke(app, ["chapter", "promote", "1", "-d", str(book_dir)])
     assert prom_ok.exit_code == 0, prom_ok.output
-    assert (book_dir / "04_creation" / "manuscript" / "vol_01" / "ch_0001.md").is_file()
+    assert (book_dir / "04_创作" / "定稿" / "第01卷" / "第0001章-深夜来电.md").is_file()
 
     # state update / record-outcome 沉淀第 1 章摘要与事实并更新角色、关系与伏笔
     state_up = runner.invoke(
@@ -433,7 +434,7 @@ def test_cli_promote_state_index_search_thread_history_and_audit(tmp_path: Path)
         ],
     )
     assert state_up.exit_code == 0, state_up.output
-    assert (book_dir / "03_state" / "history" / "vol_01_facts.jsonl").is_file()
+    assert (book_dir / "03_状态" / "历史" / "第01卷_事实.jsonl").is_file()
 
     # state inspect 检视实体状态与有效关系
     inspect_res = runner.invoke(
@@ -506,7 +507,7 @@ def test_cli_promote_state_index_search_thread_history_and_audit(tmp_path: Path)
     assert "已执行归档" in gc_apply.output
 
     # history compact 卷级事实蒸馏浓缩
-    hist_path = book_dir / "03_state" / "history" / "vol_01_facts.jsonl"
+    hist_path = book_dir / "03_状态" / "历史" / "第01卷_事实.jsonl"
     lines = []
     for ch in range(1, 26):
         lines.append(
@@ -603,3 +604,200 @@ def test_cli_error_handling_and_audit_failure_exit_codes(tmp_path: Path) -> None
         ["state", "update", "--from-file", str(batch_file), "-d", str(book_dir)],
     )
     assert batch_res.exit_code == 0, batch_res.output
+
+
+def test_cli_antigravity_init_and_host_subcommands(tmp_path: Path) -> None:
+    # 1) init -H antigravity -m "uv run ddnovel-mcp" (形态 B)
+    ag_book = tmp_path / "ag_cli_book"
+    init_res = runner.invoke(
+        app,
+        [
+            "init",
+            str(ag_book),
+            "--title",
+            "灵墟记",
+            "-H",
+            "antigravity",
+            "-m",
+            "uv run ddnovel-mcp",
+        ],
+    )
+    assert init_res.exit_code == 0, init_res.output
+    plugin_root = ag_book / ".agents" / "plugins" / "ddnovel"
+    assert (plugin_root / "plugin.json").is_file()
+    assert (plugin_root / "agents" / "dd-chapter-writer.md").is_file()
+    assert (plugin_root / "rules" / "AGENTS.md").is_file()
+    ws_mcp = json.loads((plugin_root / "mcp_config.json").read_text(encoding="utf-8"))
+    assert ws_mcp["mcpServers"]["ddnovel"]["command"] == "uv"
+    assert ws_mcp["mcpServers"]["ddnovel"]["args"] == ["run", "ddnovel-mcp"]
+    assert ws_mcp["mcpServers"]["ddnovel"]["env"]["DDNOVEL_BOOK_DIR"] == ag_book.resolve().as_posix()
+
+    # 2) host sync: 先测试无宿主配置且未传 -H 时给出清晰错误；再增量同步并测试 --no-overwrite
+    plain_book = tmp_path / "plain_book"
+    plain_init = runner.invoke(app, ["init", str(plain_book), "--no-samples"])
+    assert plain_init.exit_code == 0, plain_init.output
+    no_host_sync = runner.invoke(app, ["host", "sync", "-d", str(plain_book)])
+    assert no_host_sync.exit_code == 1
+    assert "未指定 --host" in no_host_sync.output
+
+    sync_res = runner.invoke(
+        app,
+        ["host", "sync", "-d", str(plain_book), "-H", "antigravity"],
+    )
+    assert sync_res.exit_code == 0, sync_res.output
+    plain_rules = plain_book / ".agents" / "plugins" / "ddnovel" / "rules" / "AGENTS.md"
+    assert plain_rules.is_file()
+
+    # 不带 -H 时应自动回退读取小说配置.yaml 中的 hosts，配合 --no-overwrite 保留手改文件
+    plain_rules.write_text("# 保留自定义规则\n", encoding="utf-8")
+    fallback_sync = runner.invoke(
+        app,
+        ["host", "sync", "-d", str(plain_book), "--no-overwrite"],
+    )
+    assert fallback_sync.exit_code == 0, fallback_sync.output
+    assert plain_rules.read_text(encoding="utf-8") == "# 保留自定义规则\n"
+
+    # 3) host install & host install-global (形态 A)
+    global_dir = tmp_path / "custom_global" / "ddnovel"
+    install_res = runner.invoke(
+        app,
+        ["host", "install", "antigravity", "-p", str(global_dir)],
+    )
+    assert install_res.exit_code == 0, install_res.output
+    assert (global_dir / "plugin.json").is_file()
+    global_mcp = json.loads((global_dir / "mcp_config.json").read_text(encoding="utf-8"))
+    assert "env" not in global_mcp["mcpServers"]["ddnovel"]
+    assert "cwd" not in global_mcp["mcpServers"]["ddnovel"]
+
+    install_global_res = runner.invoke(
+        app,
+        [
+            "host",
+            "install-global",
+            "antigravity",
+            "-p",
+            str(global_dir),
+            "-m",
+            "uv run ddnovel-mcp",
+        ],
+    )
+    assert install_global_res.exit_code == 0, install_global_res.output
+    updated_global_mcp = json.loads((global_dir / "mcp_config.json").read_text(encoding="utf-8"))
+    assert updated_global_mcp["mcpServers"]["ddnovel"]["command"] == "uv"
+    assert updated_global_mcp["mcpServers"]["ddnovel"]["args"] == ["run", "ddnovel-mcp"]
+
+
+def test_cli_setting_rename_and_sanitize_cleans_stale_file(tmp_path: Path) -> None:
+    book_dir = _init_sample_book(tmp_path / "book_rename")
+
+    create_res = runner.invoke(
+        app,
+        [
+            "-d",
+            str(book_dir),
+            "setting",
+            "upsert",
+            "item_qingshuang",
+            "--name",
+            "青霜剑",
+            "--category",
+            "item",
+            "--core",
+            "一柄古朴长剑。",
+        ],
+    )
+    assert create_res.exit_code == 0, create_res.output
+    old_path = book_dir / "01_设定集" / "器物" / "item_qingshuang-青霜剑.md"
+    assert old_path.is_file()
+
+    rename_res = runner.invoke(
+        app,
+        [
+            "-d",
+            str(book_dir),
+            "setting",
+            "upsert",
+            "item_qingshuang",
+            "--name",
+            "灵剑:青霜/残片",
+            "--core",
+            "断裂后的残剑。",
+        ],
+    )
+    assert rename_res.exit_code == 0, rename_res.output
+    new_path = book_dir / "01_设定集" / "器物" / "item_qingshuang-灵剑_青霜_残片.md"
+    assert new_path.is_file()
+    assert not old_path.exists()
+
+    list_res = runner.invoke(
+        app,
+        ["-d", str(book_dir), "setting", "list", "-c", "item"],
+    )
+    assert list_res.exit_code == 0, list_res.output
+    assert list_res.output.count("item_qingshuang") == 1
+
+
+def test_cli_setting_lint_and_upsert_abstraction_warnings(tmp_path: Path) -> None:
+    book_dir = _init_sample_book(tmp_path / "book_lint")
+
+    # 1) 默认纯净样本书库应 0 告警通过
+    clean_lint = runner.invoke(app, ["-d", str(book_dir), "setting", "lint"])
+    assert clean_lint.exit_code == 0, clean_lint.output
+    assert "抽象层体检通过" in clean_lint.output
+
+    # 2) upsert 混入具象台词与动作清单时，现场打印黄色告警
+    leaky_upsert = runner.invoke(
+        app,
+        [
+            "-d",
+            str(book_dir),
+            "setting",
+            "upsert",
+            "char_suyue",
+            "--name",
+            "苏玥",
+            "--category",
+            "character",
+            "--core",
+            "常见小动作清单：每次慌张必咬拇指。口头禅：“哼，我才没有帮你！”",
+        ],
+    )
+    assert leaky_upsert.exit_code == 0, leaky_upsert.output
+    assert "抽象层检查告警" in leaky_upsert.output
+
+    # 3) 新增一条已退场且含具象台词的设定，验证默认过滤而 -A 包含
+    retired_upsert = runner.invoke(
+        app,
+        [
+            "-d",
+            str(book_dir),
+            "setting",
+            "upsert",
+            "char_old_npc",
+            "--name",
+            "旧龙套",
+            "--category",
+            "character",
+            "--status",
+            "retired",
+            "--core",
+            "经典台词：“老夫当年可威风了！”",
+        ],
+    )
+    assert retired_upsert.exit_code == 0, retired_upsert.output
+
+    active_lint = runner.invoke(
+        app,
+        ["-d", str(book_dir), "setting", "lint", "-c", "character"],
+    )
+    assert active_lint.exit_code == 0, active_lint.output
+    assert "char_suyue" in active_lint.output
+    assert "char_old_npc" not in active_lint.output
+
+    all_lint = runner.invoke(
+        app,
+        ["-d", str(book_dir), "setting", "lint", "-A"],
+    )
+    assert all_lint.exit_code == 0, all_lint.output
+    assert "char_suyue" in all_lint.output
+    assert "char_old_npc" in all_lint.output

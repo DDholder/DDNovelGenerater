@@ -21,9 +21,9 @@ from typing import Any, Final, Self
 
 from .indexer import SqliteIndexer
 from .parser import ProgressiveParser
+from .paths import format_chapter_stem, is_archive_path, resolve_blueprints_dir, resolve_config_path
 from .schemas import (
     ENTITY_ID_PATTERN,
-    NOVEL_CONFIG_FILENAME,
     ChapterWindow,
     NovelConfig,
     RadarHit,
@@ -50,7 +50,7 @@ class _ThreadRow:
     @property
     def is_archived(self) -> bool:
         normalized = self.source_file.replace("\\", "/")
-        return "archive" in Path(normalized).parts
+        return is_archive_path(normalized)
 
 
 class ForeshadowRadar:
@@ -75,11 +75,11 @@ class ForeshadowRadar:
         elif indexer is not None:
             self._config = indexer.config
         else:
-            cfg_path = self._book_dir / NOVEL_CONFIG_FILENAME
+            cfg_path = resolve_config_path(self._book_dir)
             if cfg_path.is_file():
                 self._config = NovelConfig.load(self._book_dir)
             else:
-                self._config = NovelConfig(title=self._book_dir.name or "Untitled")
+                self._config = NovelConfig(title=self._book_dir.name or "未命名小说")
 
         self._parser: ProgressiveParser = (
             parser if parser is not None else ProgressiveParser(book_dir=self._book_dir)
@@ -282,7 +282,7 @@ class ForeshadowRadar:
         return None
 
     def _extract_blueprint_entities(self, chapter_num: int) -> list[str]:
-        bp_root = self._book_dir / "02_structure" / "blueprints"
+        bp_root = resolve_blueprints_dir(self._book_dir)
         if not bp_root.is_dir():
             return []
 
@@ -291,12 +291,13 @@ class ForeshadowRadar:
             return []
 
         expected_stem = format_chapter(chapter_num, width=self._config.chapter_id_width)
-        ch_stem_re = re.compile(rf"^ch_?0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
+        expected_zh_stem = format_chapter_stem(chapter_num, width=self._config.chapter_id_width, legacy=False)
+        ch_stem_re = re.compile(rf"^(?:ch_?|第)0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
 
         prioritized: list[Path] = []
         fallback: list[Path] = []
         for path in all_files:
-            if path.stem == expected_stem or ch_stem_re.match(path.stem):
+            if path.stem in (expected_stem, expected_zh_stem) or ch_stem_re.match(path.stem):
                 prioritized.append(path)
             else:
                 fallback.append(path)

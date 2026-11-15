@@ -1,14 +1,16 @@
 """新书四维目录骨架与多宿主配置渲染器 (T05)。
 
 负责初始化与具体引擎仓库解耦的独立小说书库目录树（`novel.yaml` + 四维真源目录 +
-`.ddnovel/` 派生缓存目录 + `.gitignore`），并按需渲染 `opencode`、`dsh`、`claude`
-三类 AI 宿主的 MCP 配置与四角色 Skills 目录结构。
+`.ddnovel/` 派生缓存目录 + `.gitignore`），按需渲染 `opencode`、`dsh`、`claude`、
+`antigravity` 四类 AI 宿主的 MCP 配置与四角色 Skills 目录结构，并支持安装全局 Antigravity 插件。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,11 +18,38 @@ from typing import Any, Final
 
 import yaml
 
+from ddnovel import __version__
+from ddnovel.core.paths import (
+    ZH_ACTIVE_SUBDIR,
+    ZH_ARCHIVE_SUBDIR,
+    ZH_ARCS_SUBDIR,
+    ZH_AUTHOR_NOTES_DIR,
+    ZH_AUTHOR_NOTES_README_FILENAME,
+    ZH_BLUEPRINTS_SUBDIR,
+    ZH_CHARACTERS_STATE_FILENAME,
+    ZH_CREATION_DIR,
+    ZH_DRAFTS_SUBDIR,
+    ZH_FACTIONS_STATE_FILENAME,
+    ZH_HISTORY_SUBDIR,
+    ZH_MANUSCRIPT_SUBDIR,
+    ZH_MASTER_OUTLINE_FILENAME,
+    ZH_PACKETS_SUBDIR,
+    ZH_RELATIONS_FILENAME,
+    ZH_SETTINGS_DIR,
+    ZH_STATE_DIR,
+    ZH_STRUCTURE_DIR,
+    ZH_STYLE_GUIDE_FILENAME,
+    ZH_THREADS_FILENAME,
+    ZH_VOLUMES_SUBDIR,
+    ZH_WORLD_STATE_FILENAME,
+    format_arc_stem,
+    format_chapter_stem,
+    format_volume_stem,
+    resolve_config_path,
+)
 from ddnovel.core.schemas import (
-    NOVEL_CONFIG_FILENAME,
     HostKind,
     NovelConfig,
-    format_chapter,
 )
 
 SKILL_ROLES: Final[tuple[str, ...]] = (
@@ -32,23 +61,26 @@ SKILL_ROLES: Final[tuple[str, ...]] = (
 
 BOOK_SKELETON_DIRS: Final[tuple[str, ...]] = (
     ".ddnovel",
-    "01_settings/world",
-    "01_settings/geography",
-    "01_settings/factions",
-    "01_settings/characters",
-    "01_settings/items",
-    "02_structure/volumes",
-    "02_structure/arcs",
-    "02_structure/blueprints/vol_01",
-    "03_state/active",
-    "03_state/history",
-    "03_state/archive",
-    "04_creation/packets",
-    "04_creation/drafts",
-    "04_creation/manuscript/vol_01",
+    ZH_AUTHOR_NOTES_DIR,
+    f"{ZH_SETTINGS_DIR}/世界观",
+    f"{ZH_SETTINGS_DIR}/地理",
+    f"{ZH_SETTINGS_DIR}/势力",
+    f"{ZH_SETTINGS_DIR}/人物",
+    f"{ZH_SETTINGS_DIR}/器物",
+    f"{ZH_STRUCTURE_DIR}/{ZH_VOLUMES_SUBDIR}",
+    f"{ZH_STRUCTURE_DIR}/{ZH_ARCS_SUBDIR}",
+    f"{ZH_STRUCTURE_DIR}/{ZH_BLUEPRINTS_SUBDIR}/第01卷",
+    f"{ZH_STATE_DIR}/{ZH_ACTIVE_SUBDIR}",
+    f"{ZH_STATE_DIR}/{ZH_HISTORY_SUBDIR}",
+    f"{ZH_STATE_DIR}/{ZH_ARCHIVE_SUBDIR}",
+    f"{ZH_CREATION_DIR}/{ZH_PACKETS_SUBDIR}",
+    f"{ZH_CREATION_DIR}/{ZH_DRAFTS_SUBDIR}",
+    f"{ZH_CREATION_DIR}/{ZH_MANUSCRIPT_SUBDIR}/第01卷",
 )
 
 _DEFAULT_TEMPLATES_DIR: Final[Path] = Path(__file__).resolve().parent
+ANTIGRAVITY_PLUGIN_NAME: Final[str] = "ddnovel"
+DEFAULT_ANTIGRAVITY_PLUGINS_DIR: Final[Path] = Path("~/.gemini/config/plugins")
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +93,16 @@ class InitBookResult:
     created_dirs: tuple[Path, ...]
     created_files: tuple[Path, ...]
     host_files: tuple[Path, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalPluginInstallResult:
+    """全局 AI 宿主插件安装/同步完成后的交付物摘要。"""
+
+    host: HostKind
+    plugin_dir: Path
+    mcp_command: tuple[str, ...]
+    written_files: tuple[Path, ...]
 
 
 def _dump_yaml(data: Any) -> str:
@@ -85,7 +127,7 @@ class ProjectInitializer:
         *,
         templates_dir: Path | str | None = None,
         skills_source_dir: Path | str | None = None,
-        mcp_command: Sequence[str] | None = None,
+        mcp_command: Sequence[str] | str | None = None,
     ) -> None:
         self.templates_dir: Path = (
             Path(templates_dir).resolve()
@@ -99,10 +141,11 @@ class ProjectInitializer:
             if skills_source_dir is not None
             else self.templates_dir / "skills"
         )
+        self._has_explicit_mcp_command: bool = mcp_command is not None
         self.mcp_command: tuple[str, ...] = self._normalize_mcp_command(mcp_command)
 
     @staticmethod
-    def _normalize_mcp_command(mcp_command: Sequence[str] | None) -> tuple[str, ...]:
+    def _normalize_mcp_command(mcp_command: Sequence[str] | str | None) -> tuple[str, ...]:
         if mcp_command is None:
             return ("ddnovel-mcp",)
         if isinstance(mcp_command, str):
@@ -181,10 +224,10 @@ class ProjectInitializer:
     ) -> InitBookResult:
         """在指定目录初始化完整四维小说书库及可选 AI 宿主配置。"""
         target_dir = Path(book_dir).resolve()
-        existing_cfg_path = target_dir / NOVEL_CONFIG_FILENAME
+        existing_cfg_path = resolve_config_path(target_dir)
         if existing_cfg_path.exists() and not force:
             raise FileExistsError(
-                f"目标目录已存在 {NOVEL_CONFIG_FILENAME}: {existing_cfg_path}，"
+                f"目标目录已存在配置文件 {existing_cfg_path.name}: {existing_cfg_path}，"
                 "如需覆盖请指定 force=True"
             )
 
@@ -229,11 +272,11 @@ class ProjectInitializer:
             _write(".gitignore", self._read_skeleton_text("gitignore.tmpl"))
 
         # 冷库空容器与历史事实台账（无论是否生成样例均创建）
-        _write("03_state/archive/characters.yaml", "{}\n")
-        _write("03_state/archive/factions.yaml", "{}\n")
-        _write("03_state/archive/relations.yaml", _dump_yaml({"relations": []}))
-        _write("03_state/archive/threads.yaml", _dump_yaml({"threads": []}))
-        _write("03_state/history/vol_01_facts.jsonl", "")
+        _write(f"{ZH_STATE_DIR}/{ZH_ARCHIVE_SUBDIR}/{ZH_CHARACTERS_STATE_FILENAME}", "{}\n")
+        _write(f"{ZH_STATE_DIR}/{ZH_ARCHIVE_SUBDIR}/{ZH_FACTIONS_STATE_FILENAME}", "{}\n")
+        _write(f"{ZH_STATE_DIR}/{ZH_ARCHIVE_SUBDIR}/{ZH_RELATIONS_FILENAME}", _dump_yaml({"relations": []}))
+        _write(f"{ZH_STATE_DIR}/{ZH_ARCHIVE_SUBDIR}/{ZH_THREADS_FILENAME}", _dump_yaml({"threads": []}))
+        _write(f"{ZH_STATE_DIR}/{ZH_HISTORY_SUBDIR}/第01卷_事实.jsonl", "")
 
         if include_samples:
             self._write_sample_files(
@@ -295,9 +338,13 @@ class ProjectInitializer:
         config: NovelConfig,
     ) -> None:
         preset = self._load_genre_preset(config.genre_profile)
+        author_readme_tmpl = self._read_skeleton_text("author_notes_readme.md.tmpl")
         setting_tmpl = self._read_skeleton_text("setting_card.md.tmpl")
         outline_tmpl = self._read_skeleton_text("master_outline.md.tmpl")
         style_tmpl = self._read_skeleton_text("style_guide.md.tmpl")
+
+        # 0. 00_作者设定/ 自由设定说明
+        write_fn(f"{ZH_AUTHOR_NOTES_DIR}/{ZH_AUTHOR_NOTES_README_FILENAME}", author_readme_tmpl)
 
         # 1. 01_settings/ 五类起始设定卡
         for card in preset["settings"]:
@@ -317,10 +364,10 @@ class ProjectInitializer:
             )
             write_fn(card["path"], _render_frontmatter_md(fm, body))
 
-        # 2. 02_structure/ 总纲 -> 分卷 -> 单元 -> 首章蓝图
+        # 2. 02_设定/结构 总纲 -> 分卷 -> 单元 -> 首章蓝图
         vol = preset["volume"]
         write_fn(
-            "02_structure/master_outline.md",
+            f"{ZH_STRUCTURE_DIR}/{ZH_MASTER_OUTLINE_FILENAME}",
             outline_tmpl.format(
                 title=config.title,
                 premise=preset["premise"],
@@ -335,7 +382,11 @@ class ProjectInitializer:
             "core_conflict": vol["core_conflict"],
             "folded_summary": None,
         }
-        write_fn("02_structure/volumes/vol_01.md", _render_frontmatter_md(vol_fm, vol["body"]))
+        vol_stem = format_volume_stem(vol["id"], title=vol.get("title"))
+        write_fn(
+            f"{ZH_STRUCTURE_DIR}/{ZH_VOLUMES_SUBDIR}/{vol_stem}.md",
+            _render_frontmatter_md(vol_fm, vol["body"]),
+        )
 
         arc = preset["arc"]
         arc_fm = {
@@ -345,7 +396,11 @@ class ProjectInitializer:
             "chapter_range": arc["chapter_range"],
             "folded_summary": None,
         }
-        write_fn("02_structure/arcs/vol_01_arc_01.md", _render_frontmatter_md(arc_fm, arc["body"]))
+        arc_stem = format_arc_stem(arc["id"], title=arc.get("title"))
+        write_fn(
+            f"{ZH_STRUCTURE_DIR}/{ZH_ARCS_SUBDIR}/{arc_stem}.md",
+            _render_frontmatter_md(arc_fm, arc["body"]),
+        )
 
         bp = preset["blueprint"]
         bp_fm = {
@@ -361,20 +416,32 @@ class ProjectInitializer:
             "forbidden": bp["forbidden"],
             "beats": bp["beats"],
         }
-        ch_filename = f"{format_chapter(1, width=config.chapter_id_width)}.md"
+        ch_stem = format_chapter_stem(
+            int(bp["chapter"]),
+            width=config.chapter_id_width,
+            title=bp.get("title"),
+        )
+        ch_filename = f"{ch_stem}.md"
+        bp_vol_stem = format_volume_stem(bp["volume_id"])
         write_fn(
-            f"02_structure/blueprints/vol_01/{ch_filename}",
+            f"{ZH_STRUCTURE_DIR}/{ZH_BLUEPRINTS_SUBDIR}/{bp_vol_stem}/{ch_filename}",
             _render_frontmatter_md(bp_fm, bp["body"]),
         )
 
-        # 3. 03_state/ 状态维截面文件
-        write_fn("03_state/world_state.yaml", _dump_yaml(preset["world_state"]))
-        write_fn("03_state/active/characters.yaml", _dump_yaml(preset["active_characters"]))
-        write_fn("03_state/active/factions.yaml", _dump_yaml(preset["active_factions"]))
-        write_fn("03_state/relations.yaml", _dump_yaml({"relations": preset["relations"]}))
-        write_fn("03_state/threads.yaml", _dump_yaml({"threads": preset["threads"]}))
+        # 3. 03_状态/ 状态维截面文件
+        write_fn(f"{ZH_STATE_DIR}/{ZH_WORLD_STATE_FILENAME}", _dump_yaml(preset["world_state"]))
+        write_fn(
+            f"{ZH_STATE_DIR}/{ZH_ACTIVE_SUBDIR}/{ZH_CHARACTERS_STATE_FILENAME}",
+            _dump_yaml(preset["active_characters"]),
+        )
+        write_fn(
+            f"{ZH_STATE_DIR}/{ZH_ACTIVE_SUBDIR}/{ZH_FACTIONS_STATE_FILENAME}",
+            _dump_yaml(preset["active_factions"]),
+        )
+        write_fn(f"{ZH_STATE_DIR}/{ZH_RELATIONS_FILENAME}", _dump_yaml({"relations": preset["relations"]}))
+        write_fn(f"{ZH_STATE_DIR}/{ZH_THREADS_FILENAME}", _dump_yaml({"threads": preset["threads"]}))
 
-        # 4. 04_creation/style_guide.md
+        # 4. 04_创作/文风指南.md
         sg = preset["style_guide"]
         sg_fm = {
             "tone": sg["tone"],
@@ -382,7 +449,7 @@ class ProjectInitializer:
             "banned_words": sg["banned_words"],
         }
         sg_body = style_tmpl.format(style_note=sg["style_note"])
-        write_fn("04_creation/style_guide.md", _render_frontmatter_md(sg_fm, sg_body))
+        write_fn(f"{ZH_CREATION_DIR}/{ZH_STYLE_GUIDE_FILENAME}", _render_frontmatter_md(sg_fm, sg_body))
 
     def _write_minimal_empty_files(
         self,
@@ -390,11 +457,14 @@ class ProjectInitializer:
         write_fn: Any,
         config: NovelConfig,
     ) -> None:
+        author_readme_tmpl = self._read_skeleton_text("author_notes_readme.md.tmpl")
         outline_tmpl = self._read_skeleton_text("master_outline.md.tmpl")
         style_tmpl = self._read_skeleton_text("style_guide.md.tmpl")
 
+        write_fn(f"{ZH_AUTHOR_NOTES_DIR}/{ZH_AUTHOR_NOTES_README_FILENAME}", author_readme_tmpl)
+
         write_fn(
-            "02_structure/master_outline.md",
+            f"{ZH_STRUCTURE_DIR}/{ZH_MASTER_OUTLINE_FILENAME}",
             outline_tmpl.format(
                 title=config.title,
                 premise="（待编写全书核心立意与主线冲突）",
@@ -403,13 +473,13 @@ class ProjectInitializer:
             ),
         )
         write_fn(
-            "03_state/world_state.yaml",
+            f"{ZH_STATE_DIR}/{ZH_WORLD_STATE_FILENAME}",
             _dump_yaml({"current_chapter": 0, "in_world_time": "", "macro_situation": ""}),
         )
-        write_fn("03_state/active/characters.yaml", "{}\n")
-        write_fn("03_state/active/factions.yaml", "{}\n")
-        write_fn("03_state/relations.yaml", _dump_yaml({"relations": []}))
-        write_fn("03_state/threads.yaml", _dump_yaml({"threads": []}))
+        write_fn(f"{ZH_STATE_DIR}/{ZH_ACTIVE_SUBDIR}/{ZH_CHARACTERS_STATE_FILENAME}", "{}\n")
+        write_fn(f"{ZH_STATE_DIR}/{ZH_ACTIVE_SUBDIR}/{ZH_FACTIONS_STATE_FILENAME}", "{}\n")
+        write_fn(f"{ZH_STATE_DIR}/{ZH_RELATIONS_FILENAME}", _dump_yaml({"relations": []}))
+        write_fn(f"{ZH_STATE_DIR}/{ZH_THREADS_FILENAME}", _dump_yaml({"threads": []}))
 
         sg_fm = {
             "tone": "",
@@ -417,7 +487,7 @@ class ProjectInitializer:
             "banned_words": ["震惊全场", "恐怖如斯"],
         }
         sg_body = style_tmpl.format(style_note="保持叙事节奏凝练，突出动作与细节。")
-        write_fn("04_creation/style_guide.md", _render_frontmatter_md(sg_fm, sg_body))
+        write_fn(f"{ZH_CREATION_DIR}/{ZH_STYLE_GUIDE_FILENAME}", _render_frontmatter_md(sg_fm, sg_body))
 
     def render_host_configs(
         self,
@@ -468,8 +538,17 @@ class ProjectInitializer:
                 written_files.extend(
                     self._sync_host_skills(target_dir / ".claude" / "skills", overwrite=overwrite)
                 )
+            elif host == HostKind.ANTIGRAVITY:
+                written_files.extend(
+                    self._render_antigravity_bundle(
+                        target_dir / ".agents" / "plugins" / ANTIGRAVITY_PLUGIN_NAME,
+                        mcp_command=self.mcp_command,
+                        book_dir_posix=book_dir_posix,
+                        overwrite=overwrite,
+                    )
+                )
 
-        if update_novel_yaml and (target_dir / NOVEL_CONFIG_FILENAME).is_file():
+        if update_novel_yaml and resolve_config_path(target_dir).is_file():
             cfg = NovelConfig.load(target_dir)
             merged_hosts = list(dict.fromkeys([*cfg.hosts, *host_list]))
             if merged_hosts != cfg.hosts:
@@ -623,6 +702,200 @@ class ProjectInitializer:
                     copied.append(dst_file)
         return copied
 
+    def install_global_plugin(
+        self,
+        host: HostKind | str = HostKind.ANTIGRAVITY,
+        *,
+        plugin_dir: Path | str | None = None,
+        overwrite: bool = True,
+    ) -> GlobalPluginInstallResult:
+        """安装或升级机器级全局 AI 宿主插件（当前支持 ``antigravity``）。"""
+        normalized = self._normalize_hosts([host])
+        kind = normalized[0]
+        if kind != HostKind.ANTIGRAVITY:
+            raise ValueError(
+                "全局插件安装目前仅支持 'antigravity' 宿主；"
+                "书库级配置请使用 ddnovel init -H <host> 或 ddnovel host sync"
+            )
+
+        target_plugin_dir = (
+            Path(plugin_dir).expanduser().resolve()
+            if plugin_dir is not None
+            else (DEFAULT_ANTIGRAVITY_PLUGINS_DIR.expanduser().resolve() / ANTIGRAVITY_PLUGIN_NAME)
+        )
+        effective_cmd = (
+            self.mcp_command
+            if self._has_explicit_mcp_command
+            else resolve_global_mcp_command()
+        )
+        written_files = self._render_antigravity_bundle(
+            target_plugin_dir,
+            mcp_command=effective_cmd,
+            book_dir_posix=None,
+            overwrite=overwrite,
+        )
+        return GlobalPluginInstallResult(
+            host=kind,
+            plugin_dir=target_plugin_dir,
+            mcp_command=effective_cmd,
+            written_files=tuple(written_files),
+        )
+
+    def _render_antigravity_bundle(
+        self,
+        plugin_dir: Path,
+        *,
+        mcp_command: tuple[str, ...],
+        book_dir_posix: str | None,
+        overwrite: bool,
+    ) -> list[Path]:
+        """渲染 Antigravity 插件包（plugin.json / mcp_config.json / agents / rules / skills）。"""
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        written_files: list[Path] = []
+
+        # 1. plugin.json
+        manifest_path = plugin_dir / "plugin.json"
+        if not manifest_path.exists() or overwrite:
+            manifest_data = json.loads(
+                (self.host_configs_dir / "antigravity.plugin.json").read_text(encoding="utf-8")
+            )
+            manifest_data["version"] = __version__
+            manifest_path.write_text(
+                json.dumps(manifest_data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            written_files.append(manifest_path)
+
+        # 2. README.md
+        readme_path = plugin_dir / "README.md"
+        if not readme_path.exists() or overwrite:
+            readme_text = (self.host_configs_dir / "antigravity.readme.md.tmpl").read_text(encoding="utf-8")
+            readme_path.write_text(readme_text, encoding="utf-8")
+            written_files.append(readme_path)
+
+        # 3. mcp_config.json（保留同目录其他已配置 MCP 服务）
+        mcp_path = plugin_dir / "mcp_config.json"
+        mcp_template = json.loads(
+            (self.host_configs_dir / "antigravity.mcp.json").read_text(encoding="utf-8")
+        )
+        should_write_mcp = True
+        if mcp_path.is_file():
+            try:
+                existing = json.loads(mcp_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                existing = None
+            if isinstance(existing, dict):
+                servers_block = existing.get("mcpServers")
+                if (
+                    not overwrite
+                    and isinstance(servers_block, dict)
+                    and ANTIGRAVITY_PLUGIN_NAME in servers_block
+                ):
+                    should_write_mcp = False
+                    mcp_data = existing
+                else:
+                    mcp_data = existing
+            else:
+                if not overwrite:
+                    should_write_mcp = False
+                mcp_data = mcp_template
+        else:
+            mcp_data = mcp_template
+
+        if should_write_mcp:
+            servers = mcp_data.get("mcpServers")
+            if not isinstance(servers, dict):
+                servers = {}
+                mcp_data["mcpServers"] = servers
+
+            server_entry: dict[str, Any] = {
+                "command": mcp_command[0],
+                "args": list(mcp_command[1:]),
+            }
+            if book_dir_posix is not None:
+                server_entry["cwd"] = book_dir_posix
+                server_entry["env"] = {"DDNOVEL_BOOK_DIR": book_dir_posix}
+
+            servers[ANTIGRAVITY_PLUGIN_NAME] = server_entry
+            mcp_path.write_text(
+                json.dumps(mcp_data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            written_files.append(mcp_path)
+
+        # 4. agents/dd-chapter-writer.md（严格空白上下文执笔子代理）
+        agent_path = plugin_dir / "agents" / "dd-chapter-writer.md"
+        if not agent_path.exists() or overwrite:
+            agent_path.parent.mkdir(parents=True, exist_ok=True)
+            agent_text = (self.host_configs_dir / "antigravity.chapter_writer.agent.md").read_text(
+                encoding="utf-8"
+            )
+            agent_path.write_text(agent_text, encoding="utf-8")
+            written_files.append(agent_path)
+
+        # 5. rules/AGENTS.md（纯 Markdown 无 Frontmatter）
+        rules_path = plugin_dir / "rules" / "AGENTS.md"
+        if not rules_path.exists() or overwrite:
+            rules_path.parent.mkdir(parents=True, exist_ok=True)
+            if book_dir_posix is not None:
+                routing_section = (
+                    f"- 当前工作区插件已绑定固定小说书库根目录：`{book_dir_posix}`"
+                    "（已注入 `DDNOVEL_BOOK_DIR`）。\n"
+                    f"- 调用 `novel_*` MCP 工具时可省略 `book_dir` 或显式传入 `{book_dir_posix}`；"
+                    f"执行 `ddnovel` CLI 命令时在书库根目录运行或传入 `-d {book_dir_posix}`。"
+                )
+            else:
+                routing_section = (
+                    "- 当前插件以**全局多书模式**运行（未硬编码 `DDNOVEL_BOOK_DIR`），"
+                    "支持一引擎驱动多本小说书库。\n"
+                    "- 调用任何 `novel_*` MCP 工具时，**必须显式传入目标书库根目录路径 `book_dir`**"
+                    "（例如当前打开的小说工作区路径）；\n"
+                    "- 执行 `ddnovel` CLI 命令时，**必须传入 `-d <book_dir>`**（或在目标书库目录下运行），"
+                    "确保不会读写错误书库。"
+                )
+            rules_tmpl = (self.host_configs_dir / "antigravity.rules.md.tmpl").read_text(encoding="utf-8")
+            rules_path.write_text(rules_tmpl.format(routing_section=routing_section), encoding="utf-8")
+            written_files.append(rules_path)
+
+        # 6. skills/<role>/SKILL.md
+        written_files.extend(self._sync_host_skills(plugin_dir / "skills", overwrite=overwrite))
+        return written_files
+
+
+def resolve_global_mcp_command(
+    explicit_mcp_command: Sequence[str] | str | None = None,
+) -> tuple[str, ...]:
+    """解析全局插件使用的绝对 MCP Server 启动命令，避免因未激活虚拟环境导致无法启动。"""
+    if explicit_mcp_command is not None:
+        return ProjectInitializer._normalize_mcp_command(explicit_mcp_command)
+
+    exe_dir = Path(sys.executable).resolve().parent
+    candidate_names = ("ddnovel-mcp.exe", "ddnovel-mcp") if os.name == "nt" else ("ddnovel-mcp",)
+    for name in candidate_names:
+        candidate = exe_dir / name
+        if candidate.is_file():
+            return (candidate.as_posix(),)
+
+    which_cmd = shutil.which("ddnovel-mcp")
+    if which_cmd:
+        return (Path(which_cmd).resolve().as_posix(),)
+
+    return (Path(sys.executable).resolve().as_posix(), "-m", "ddnovel.mcp_server")
+
+
+def install_antigravity_plugin(
+    *,
+    plugin_dir: Path | str | None = None,
+    mcp_command: Sequence[str] | str | None = None,
+    overwrite: bool = True,
+) -> GlobalPluginInstallResult:
+    """快捷安装或更新本机全局 Antigravity ``ddnovel`` 插件。"""
+    return ProjectInitializer(mcp_command=mcp_command).install_global_plugin(
+        HostKind.ANTIGRAVITY,
+        plugin_dir=plugin_dir,
+        overwrite=overwrite,
+    )
+
 
 def init_book(
     book_dir: Path | str,
@@ -649,9 +922,14 @@ def init_book(
 
 
 __all__ = [
+    "ANTIGRAVITY_PLUGIN_NAME",
     "BOOK_SKELETON_DIRS",
+    "DEFAULT_ANTIGRAVITY_PLUGINS_DIR",
+    "GlobalPluginInstallResult",
     "InitBookResult",
     "ProjectInitializer",
     "SKILL_ROLES",
     "init_book",
+    "install_antigravity_plugin",
+    "resolve_global_mcp_command",
 ]

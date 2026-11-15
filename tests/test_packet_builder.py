@@ -454,8 +454,8 @@ def test_first_chapter_and_missing_optional_files(tmp_path: Path) -> None:
     ProjectInitializer().init_book(book_dir, title="开篇测试", genre_profile="general")
 
     # 删除可选文件验证优雅降级
-    (book_dir / "04_creation" / "style_guide.md").unlink()
-    (book_dir / "03_state" / "world_state.yaml").unlink()
+    (book_dir / "04_创作" / "文风指南.md").unlink()
+    (book_dir / "03_状态" / "世界状态.yaml").unlink()
 
     res = build_packet(book_dir, 1)
     text = (book_dir / res.packet_path).read_text(encoding="utf-8")
@@ -565,3 +565,51 @@ def test_hundred_chapters_packet_build_performance(tmp_path: Path) -> None:
     assert res.chapter == 142
     assert (book_dir / res.packet_path).is_file()
     assert elapsed_ms < 300.0, f"百章规模单章编译耗时过高: {elapsed_ms:.1f} ms"
+
+
+def test_packet_builder_isolates_author_notes_strips_memos_and_warns_concrete_leaks(
+    tmp_path: Path,
+) -> None:
+    """验证单章写作包绝不漏入 00_作者设定/ 与 [作者备忘]，且在槽位 1 声明反照抄红线并上报具象泄漏告警。"""
+    book_dir = _copy_fixture_book("cultivation_rpg", tmp_path)
+
+    # 1) 在两类作者层目录中写入独占词元与同名实体随笔
+    for folder in ("00_作者设定", "00_author_notes"):
+        note = book_dir / folder / "suyao_memo.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(
+            f"---\nid: char_suyao\nname: 苏瑶\n---\n作者层独占密文_{folder}_天台台词草稿\n",
+            encoding="utf-8",
+        )
+
+    # 2) 在模型层 char_suyao.md 中混入 [作者备忘]、HTML 注释与一句具象台词
+    suyao_path = book_dir / "01_settings" / "characters" / "char_suyao.md"
+    orig_text = suyao_path.read_text(encoding="utf-8")
+    suyao_path.write_text(
+        orig_text.rstrip()
+        + "\n<!-- 设定注释隔离文本 -->\n"
+        + "\n## [作者备忘]\n备忘块独占词元绝不能进写作包。\n"
+        + '\n## [专题: 应急反应]\n口头禅：“哼，谁要你管我生死！”\n',
+        encoding="utf-8",
+    )
+
+    # 同步修改第142章蓝图挂载该专题以便检验 topics 也触发具象告警与备忘剥离
+    bp_path = book_dir / "02_structure" / "blueprints" / "vol_01" / "ch_0142.md"
+    bp_text = bp_path.read_text(encoding="utf-8").replace(
+        "topics: []",
+        "topics:\n  - entity_id: char_suyao\n    topic: 应急反应",
+    )
+    bp_path.write_text(bp_text, encoding="utf-8")
+
+    with SqliteIndexer(book_dir) as idx:
+        idx.rebuild()
+        with PacketBuilder(book_dir, indexer=idx, auto_sync=False) as builder:
+            res = builder.build(142)
+
+    pkt_text = (book_dir / res.packet_path).read_text(encoding="utf-8")
+    assert "作者层独占密文_00_作者设定_天台台词草稿" not in pkt_text
+    assert "作者层独占密文_00_author_notes_天台台词草稿" not in pkt_text
+    assert "设定注释隔离文本" not in pkt_text
+    assert "备忘块独占词元绝不能进写作包" not in pkt_text
+    assert "严禁照抄打卡" in pkt_text and "规则边界" in pkt_text
+    assert any("char_suyao" in w for w in res.warnings)

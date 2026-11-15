@@ -57,6 +57,9 @@ def _make_minimal_book(tmp_path: Path, *, current_chapter: int = 10, genre: str 
         (book_dir / rel).mkdir(parents=True, exist_ok=True)
     cfg = NovelConfig(title="测试书库", genre_profile=genre, current_chapter=current_chapter)
     cfg.dump(book_dir)
+    zh_cfg = book_dir / "小说配置.yaml"
+    if zh_cfg.exists():
+        zh_cfg.replace(book_dir / "novel.yaml")
     return book_dir
 
 
@@ -777,4 +780,73 @@ cast:
         assert any(
             iss.code == "ARCHIVED_ENTITY_AWAKENED" and iss.level == IssueLevel.WARNING
             for iss in report.issues
+        )
+
+
+def test_promote_chapter_extracts_chinese_heading_and_fallback_and_cleans_stale(
+    tmp_path: Path,
+) -> None:
+    from ddnovel.templates.initializer import init_book
+
+    book_dir = tmp_path / "promote_title_book"
+    init_book(
+        book_dir,
+        title="定稿命名测试",
+        genre_profile="general",
+        include_samples=True,
+    )
+
+    drafts_dir = book_dir / "04_创作" / "草稿"
+    drafts_dir.mkdir(parents=True, exist_ok=True)
+    draft_106 = drafts_dir / "第0106章_草稿.md"
+    draft_1 = drafts_dir / "第0001章_草稿.md"
+
+    with LifecycleManager(book_dir) as lm:
+        draft_106.write_text("# 第一百零六章 深渊探印\n\n陆沉推开石门。", encoding="utf-8")
+        res1 = lm.promote_chapter(106)
+        assert res1.manuscript_path == "04_创作/定稿/第01卷/第0106章-深渊探印.md"
+        assert (book_dir / res1.manuscript_path).is_file()
+
+        draft_106.write_text("# 第106章 终局回响\n\n陆沉转身离开。", encoding="utf-8")
+        res2 = lm.promote_chapter(106)
+        assert res2.manuscript_path == "04_创作/定稿/第01卷/第0106章-终局回响.md"
+        assert (book_dir / res2.manuscript_path).is_file()
+        assert not (book_dir / "04_创作" / "定稿" / "第01卷" / "第0106章-深渊探印.md").exists()
+
+        draft_1.write_text("# 第1章\n\n深夜电话响起。", encoding="utf-8")
+        res3 = lm.promote_chapter(1)
+        assert res3.manuscript_path == "04_创作/定稿/第01卷/第0001章-深夜来电与异常校验码.md"
+        assert (book_dir / res3.manuscript_path).is_file()
+
+
+def test_audit_chapter_flags_setting_concrete_leak_warning(tmp_path: Path) -> None:
+    book_dir = _copy_fixture_book("cultivation_rpg", tmp_path)
+
+    with LifecycleManager(book_dir) as lm:
+        clean_report = lm.audit_chapter(142)
+        assert not any(i.code == "SETTING_CONCRETE_LEAK" for i in clean_report.issues)
+
+    # 给第142章出场的苏瑶 [核心] 区块注入示范台词与动作清单泄露
+    suyao_card = book_dir / "01_settings" / "characters" / "char_suyao.md"
+    suyao_card.write_text(
+        suyao_card.read_text(encoding="utf-8").replace(
+            "## [核心]\n",
+            "## [核心]\n常见小动作清单：每次紧张必咬拇指并说：“哼，别管我！我才没受伤！”\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with LifecycleManager(book_dir) as lm:
+        ch_report = lm.audit_chapter(142)
+        assert ch_report.passed is True
+        assert any(
+            iss.level == IssueLevel.WARNING and iss.code == "SETTING_CONCRETE_LEAK"
+            for iss in ch_report.issues
+        )
+
+        book_report = lm.audit_chapter(None)
+        assert any(
+            iss.level == IssueLevel.WARNING and iss.code == "SETTING_CONCRETE_LEAK"
+            for iss in book_report.issues
         )

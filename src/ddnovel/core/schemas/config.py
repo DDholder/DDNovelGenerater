@@ -13,7 +13,8 @@ from pydantic_core import InitErrorDetails, PydanticCustomError
 from ._base import HostKind, StrictModel
 from .genres import list_genres
 
-NOVEL_CONFIG_FILENAME: Final[str] = "novel.yaml"
+NOVEL_CONFIG_FILENAME: Final[str] = "小说配置.yaml"
+_LEGACY_NOVEL_CONFIG_FILENAME: Final[str] = "novel.yaml"
 TRIM_ALLOWED_SLOTS: Final[frozenset[str]] = frozenset(
     {"world_and_facts", "entities", "continuity"}
 )
@@ -226,13 +227,18 @@ class NovelConfig(StrictModel):
 
     @classmethod
     def load(cls, book_dir: Path | str) -> Self:
-        """从 ``Path(book_dir) / "novel.yaml"`` 读取并校验全局配置。
+        """从 ``小说配置.yaml``（兼容旧版 ``novel.yaml``）读取并校验全局配置。
 
         Raises:
-            FileNotFoundError: 当 ``novel.yaml`` 文件不存在时抛出。
+            FileNotFoundError: 当配置文件不存在时抛出。
             ValidationError: 当 YAML 为空、语法损坏、顶层非映射或字段校验失败时抛出。
         """
-        config_path = Path(book_dir) / NOVEL_CONFIG_FILENAME
+        root = Path(book_dir)
+        config_path = root / NOVEL_CONFIG_FILENAME
+        if not config_path.is_file():
+            legacy_path = root / _LEGACY_NOVEL_CONFIG_FILENAME
+            if legacy_path.is_file():
+                config_path = legacy_path
         if not config_path.is_file():
             raise FileNotFoundError(f"未找到书籍配置文件: {config_path}")
 
@@ -274,10 +280,13 @@ class NovelConfig(StrictModel):
         return cls.model_validate(data)
 
     def dump(self, book_dir: Path | str) -> Path:
-        """将当前配置序列化写入 ``Path(book_dir) / "novel.yaml"`` 并返回写入路径。"""
+        """将当前配置序列化写入 ``小说配置.yaml``（若为旧版书库则写回 ``novel.yaml``）并返回写入路径。"""
         target_dir = Path(book_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
         config_path = target_dir / NOVEL_CONFIG_FILENAME
+        legacy_path = target_dir / _LEGACY_NOVEL_CONFIG_FILENAME
+        if not config_path.is_file() and legacy_path.is_file():
+            config_path = legacy_path
 
         payload = self.model_dump(mode="json", by_alias=True, exclude_none=True)
         yaml_text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)

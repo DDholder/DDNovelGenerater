@@ -25,9 +25,35 @@ from pydantic import TypeAdapter, ValidationError
 
 from .alias_matcher import AliasMatcher
 from .indexer import SqliteIndexer
-from .parser import ProgressiveParser, split_frontmatter
+from .parser import ProgressiveParser, lint_model_setting_doc, split_frontmatter
+from .paths import (
+    extract_clean_title,
+    find_existing_manuscript_files,
+    format_chapter_stem,
+    infer_volume_id_from_stem,
+    is_legacy_book,
+    list_facts_files,
+    resolve_active_characters_file,
+    resolve_active_factions_file,
+    resolve_archive_characters_file,
+    resolve_archive_factions_file,
+    resolve_archive_relations_file,
+    resolve_archive_threads_file,
+    resolve_blueprints_dir,
+    resolve_config_path,
+    resolve_drafts_dir,
+    resolve_facts_file,
+    resolve_manuscript_dir,
+    resolve_manuscript_file,
+    resolve_packets_dir,
+    resolve_relations_file,
+    resolve_settings_root,
+    resolve_style_guide_file,
+    resolve_threads_file,
+    resolve_volumes_dir,
+    resolve_world_state_file,
+)
 from .schemas import (
-    NOVEL_CONFIG_FILENAME,
     VOLUME_ID_PATTERN,
     AuditIssue,
     AuditReport,
@@ -70,7 +96,7 @@ _THREAD_ID_ADAPTER: Final[TypeAdapter[str]] = TypeAdapter(ThreadId)
 _VOLUME_ID_ADAPTER: Final[TypeAdapter[str]] = TypeAdapter(VolumeId)
 
 _VOLUME_DIR_RE: Final[re.Pattern[str]] = re.compile(VOLUME_ID_PATTERN)
-_CH_FILE_RE: Final[re.Pattern[str]] = re.compile(r"ch_?0*(\d+)", re.IGNORECASE)
+_CH_FILE_RE: Final[re.Pattern[str]] = re.compile(r"(?:ch_?|第)0*(\d+)", re.IGNORECASE)
 _CH_CN_HEADING_RE: Final[re.Pattern[str]] = re.compile(r"^\s*#\s*第\s*0*(\d+)\s*章", re.MULTILINE)
 
 _FLASHBACK_MARKERS: Final[tuple[str, ...]] = (
@@ -171,11 +197,11 @@ class LifecycleManager:
         elif indexer is not None:
             self._config = indexer.config
         else:
-            cfg_path = self._book_dir / NOVEL_CONFIG_FILENAME
+            cfg_path = resolve_config_path(self._book_dir)
             if cfg_path.is_file():
                 self._config = NovelConfig.load(self._book_dir)
             else:
-                self._config = NovelConfig(title=self._book_dir.name or "Untitled")
+                self._config = NovelConfig(title=self._book_dir.name or "未命名小说")
 
         self._parser: ProgressiveParser = (
             parser if parser is not None else ProgressiveParser(book_dir=self._book_dir)
@@ -258,6 +284,7 @@ class LifecycleManager:
 
         draft_abs = self._locate_draft_file(ch)
         draft_rel = self._rel_posix(draft_abs)
+        draft_text = draft_abs.read_text(encoding="utf-8")
 
         if run_audit:
             report = self.audit_chapter(ch, sync_index=sync_index)
@@ -270,9 +297,17 @@ class LifecycleManager:
                 raise ValueError(f"第 {ch} 章定稿前一致性体检未通过: {err_msgs}")
 
         resolved_vol = volume_id if volume_id is not None else self._infer_volume_id(ch)
-        ch_prefix = format_chapter(ch, width=self._config.chapter_id_width)
-        manuscript_rel = f"04_creation/manuscript/{resolved_vol}/{ch_prefix}.md"
-        manuscript_abs = self._book_dir / manuscript_rel
+        legacy_mode = is_legacy_book(self._book_dir)
+        chapter_title = "" if legacy_mode else self._resolve_chapter_title(ch, draft_text)
+        manuscript_abs = resolve_manuscript_file(
+            self._book_dir,
+            resolved_vol,
+            ch,
+            width=self._config.chapter_id_width,
+            title=chapter_title,
+            for_write=True,
+        )
+        manuscript_rel = self._rel_posix(manuscript_abs)
 
         effective_cur = max(ch, self._config.current_chapter)
 
@@ -287,15 +322,18 @@ class LifecycleManager:
             )
 
         manuscript_abs.parent.mkdir(parents=True, exist_ok=True)
-        manuscript_abs.write_text(draft_abs.read_text(encoding="utf-8"), encoding="utf-8")
+        manuscript_abs.write_text(draft_text, encoding="utf-8")
+        for stale in find_existing_manuscript_files(self._book_dir, ch, vol_id=resolved_vol):
+            if stale.resolve() != manuscript_abs.resolve():
+                stale.unlink(missing_ok=True)
 
-        cfg_path = self._book_dir / NOVEL_CONFIG_FILENAME
+        cfg_path = resolve_config_path(self._book_dir, for_write=True)
         if ch > self._config.current_chapter:
             self._config = self._config.model_copy(update={"current_chapter": ch})
             if cfg_path.is_file():
                 self._config.dump(self._book_dir)
 
-        ws_path = self._book_dir / "03_state" / "world_state.yaml"
+        ws_path = resolve_world_state_file(self._book_dir, for_write=True)
         if ws_path.is_file():
             raw_ws = yaml.safe_load(ws_path.read_text(encoding="utf-8"))
             if isinstance(raw_ws, dict):
@@ -321,13 +359,51 @@ class LifecycleManager:
             dry_run=False,
         )
 
+    def _resolve_chapter_title(self, chapter_num: int, draft_text: str) -> str:
+        """按草稿 Frontmatter -> 正文标题 -> 蓝图标题优先级提取定稿干净副标题。"""
+        fm_draft, draft_body = split_frontmatter(draft_text)
+        raw_fm_title = fm_draft.get("title")
+        if raw_fm_title:
+            cleaned = extract_clean_title(str(raw_fm_title), "chapter")
+            if cleaned:
+                return cleaned
+
+        m_h1 = re.search(r"^\s*#\s+([^#\r\n]+)", draft_body, re.MULTILINE)
+        if m_h1:
+            cleaned = extract_clean_title(m_h1.group(1), "chapter")
+            if cleaned:
+                return cleaned
+        else:
+            m_h2 = re.search(
+                r"^\s*##\s+(第\s*[零〇一二三四五六七八九十百千万两\d]+\s*[章回节][^\r\n]*)$",
+                draft_body,
+                re.MULTILINE,
+            )
+            if m_h2:
+                cleaned = extract_clean_title(m_h2.group(1), "chapter")
+                if cleaned:
+                    return cleaned
+
+        bp_hit = self._locate_blueprint_for_chapter(chapter_num)
+        if bp_hit is not None:
+            bp_doc, _ = bp_hit
+            if bp_doc.title:
+                cleaned = extract_clean_title(bp_doc.title, "chapter")
+                if cleaned:
+                    return cleaned
+
+        return ""
+
     def _locate_draft_file(self, chapter_num: int) -> Path:
-        drafts_dir = self._book_dir / "04_creation" / "drafts"
+        drafts_dir = resolve_drafts_dir(self._book_dir)
         if not drafts_dir.is_dir():
             raise FileNotFoundError(f"未找到第 {chapter_num} 章草稿文件（目录不存在: {drafts_dir}）")
 
         ch_prefix = format_chapter(chapter_num, width=self._config.chapter_id_width)
+        zh_prefix = format_chapter_stem(chapter_num, width=self._config.chapter_id_width, legacy=False)
         candidates = [
+            drafts_dir / f"{zh_prefix}_草稿.md",
+            drafts_dir / f"第{chapter_num}章_草稿.md",
             drafts_dir / f"{ch_prefix}_draft.md",
             drafts_dir / f"ch_{chapter_num}_draft.md",
         ]
@@ -335,17 +411,17 @@ class LifecycleManager:
             if cand.is_file():
                 return cand
 
-        ch_re = re.compile(rf"^ch_?0*{chapter_num}_draft$", re.IGNORECASE)
+        ch_re = re.compile(rf"^(?:ch_?0*{chapter_num}_draft|第0*{chapter_num}章_草稿)$", re.IGNORECASE)
         for p in sorted(drafts_dir.glob("*.md")):
             if p.is_file() and ch_re.match(p.stem):
                 return p
 
         raise FileNotFoundError(
-            f"未找到第 {chapter_num} 章草稿文件: {drafts_dir / f'{ch_prefix}_draft.md'}"
+            f"未找到第 {chapter_num} 章草稿文件: {drafts_dir / f'{zh_prefix}_草稿.md'}"
         )
 
     def _locate_blueprint_for_chapter(self, chapter_num: int) -> tuple[BlueprintDoc, Path] | None:
-        bp_root = self._book_dir / "02_structure" / "blueprints"
+        bp_root = resolve_blueprints_dir(self._book_dir)
         if not bp_root.is_dir():
             return None
 
@@ -354,12 +430,15 @@ class LifecycleManager:
             return None
 
         expected_stem = format_chapter(chapter_num, width=self._config.chapter_id_width)
-        ch_stem_re = re.compile(rf"^ch_?0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
+        expected_zh_stem = format_chapter_stem(
+            chapter_num, width=self._config.chapter_id_width, legacy=False
+        )
+        ch_stem_re = re.compile(rf"^(?:ch_?|第)0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
 
         prioritized: list[Path] = []
         fallback: list[Path] = []
         for path in all_files:
-            if path.stem == expected_stem or ch_stem_re.match(path.stem):
+            if path.stem in (expected_stem, expected_zh_stem) or ch_stem_re.match(path.stem):
                 prioritized.append(path)
             else:
                 fallback.append(path)
@@ -378,17 +457,18 @@ class LifecycleManager:
             if bp.volume_id is not None:
                 return bp.volume_id
             for part in reversed(bp_path.parts):
-                if _VOLUME_DIR_RE.match(part):
-                    return part
+                inferred_part = infer_volume_id_from_stem(part)
+                if _VOLUME_DIR_RE.match(inferred_part):
+                    return inferred_part
 
-        # 2. 章节范围覆盖该章的 volumes/vol_XX.md
-        vol_dir = self._book_dir / "02_structure" / "volumes"
+        # 2. 章节范围覆盖该章的分卷文件
+        vol_dir = resolve_volumes_dir(self._book_dir)
         if vol_dir.is_dir():
             for path in sorted(vol_dir.glob("*.md")):
                 if not path.is_file():
                     continue
                 fm, body = split_frontmatter(path.read_text(encoding="utf-8"))
-                vid = fm.get("id") or path.stem
+                vid = fm.get("id") or infer_volume_id_from_stem(path.stem)
                 try:
                     doc = VolumeDoc.model_validate({**fm, "id": vid, "body": body})
                 except ValidationError:
@@ -397,14 +477,22 @@ class LifecycleManager:
                     if doc.chapter_range.start <= chapter_num <= doc.chapter_range.end:
                         return doc.id
 
-        # 3. 现有最大 manuscript/vol_XX
-        ms_root = self._book_dir / "04_creation" / "manuscript"
+        # 3. 现有最大定稿分卷目录
+        ms_root = resolve_manuscript_dir(self._book_dir)
         if ms_root.is_dir():
-            vol_dirs = [
-                d.name for d in ms_root.iterdir() if d.is_dir() and _VOLUME_DIR_RE.match(d.name)
-            ]
-            if vol_dirs:
-                return max(vol_dirs, key=lambda name: (int(name.split("_")[1]), name))
+            vol_candidates: list[tuple[int, str]] = []
+            for d in ms_root.iterdir():
+                if not d.is_dir():
+                    continue
+                if _VOLUME_DIR_RE.match(d.name):
+                    vol_candidates.append((int(d.name.split("_")[1]), d.name))
+                else:
+                    m_zh = re.match(r"^第(\d+)卷$", d.name)
+                    if m_zh:
+                        num = int(m_zh.group(1))
+                        vol_candidates.append((num, f"vol_{num:02d}"))
+            if vol_candidates:
+                return max(vol_candidates, key=lambda item: (item[0], item[1]))[1]
 
         # 4. 默认 vol_01
         return "vol_01"
@@ -438,8 +526,8 @@ class LifecycleManager:
 
         cleaned: list[Path] = []
         for sub_dir in (
-            self._book_dir / "04_creation" / "packets",
-            self._book_dir / "04_creation" / "drafts",
+            resolve_packets_dir(self._book_dir),
+            resolve_drafts_dir(self._book_dir),
         ):
             if not sub_dir.is_dir():
                 continue
@@ -482,7 +570,7 @@ class LifecycleManager:
         max_fact_ch = self._collect_max_fact_chapter_by_entity()
 
         # 收集未完结伏笔绑定的实体集合
-        threads_path = self._book_dir / "03_state" / "threads.yaml"
+        threads_path = resolve_threads_file(self._book_dir, for_write=True)
         active_threads_file = self._load_threads_file(threads_path)
         protected_entities: set[str] = set()
         for thr in active_threads_file.threads:
@@ -493,8 +581,8 @@ class LifecycleManager:
 
         # 1) 角色热池 -> 冷库
         archived_characters: list[str] = []
-        active_chars_path = self._book_dir / "03_state" / "active" / "characters.yaml"
-        archive_chars_path = self._book_dir / "03_state" / "archive" / "characters.yaml"
+        active_chars_path = resolve_active_characters_file(self._book_dir, for_write=True)
+        archive_chars_path = resolve_archive_characters_file(self._book_dir, for_write=True)
         active_chars = self._load_character_state_file(active_chars_path)
         if active_chars.root:
             kept_chars: dict[str, CharacterState] = {}
@@ -535,8 +623,8 @@ class LifecycleManager:
 
         # 2) 势力热池 -> 冷库
         archived_factions: list[str] = []
-        active_facs_path = self._book_dir / "03_state" / "active" / "factions.yaml"
-        archive_facs_path = self._book_dir / "03_state" / "archive" / "factions.yaml"
+        active_facs_path = resolve_active_factions_file(self._book_dir, for_write=True)
+        archive_facs_path = resolve_archive_factions_file(self._book_dir, for_write=True)
         active_facs = self._load_faction_state_file(active_facs_path)
         if active_facs.root:
             kept_facs: dict[str, FactionState] = {}
@@ -579,8 +667,8 @@ class LifecycleManager:
                     )
 
         # 3) 双时态关系边 -> archive/relations.yaml
-        relations_path = self._book_dir / "03_state" / "relations.yaml"
-        archive_relations_path = self._book_dir / "03_state" / "archive" / "relations.yaml"
+        relations_path = resolve_relations_file(self._book_dir, for_write=True)
+        archive_relations_path = resolve_archive_relations_file(self._book_dir, for_write=True)
         relations_file = self._load_relations_file(relations_path)
         archived_relations_count = 0
         if relations_file.relations:
@@ -614,7 +702,7 @@ class LifecycleManager:
                     )
 
         # 4) 已完结伏笔 -> archive/threads.yaml
-        archive_threads_path = self._book_dir / "03_state" / "archive" / "threads.yaml"
+        archive_threads_path = resolve_archive_threads_file(self._book_dir, for_write=True)
         archived_threads: list[str] = []
         if active_threads_file.threads:
             kept_threads: list[Thread] = []
@@ -678,8 +766,8 @@ class LifecycleManager:
             raise ValueError(f"thread_id 必须为非空合法 ThreadId 字符串，收到: {thread_id!r}")
         tid = _THREAD_ID_ADAPTER.validate_python(thread_id.strip())
 
-        active_threads_path = self._book_dir / "03_state" / "threads.yaml"
-        archive_threads_path = self._book_dir / "03_state" / "archive" / "threads.yaml"
+        active_threads_path = resolve_threads_file(self._book_dir, for_write=True)
+        archive_threads_path = resolve_archive_threads_file(self._book_dir, for_write=True)
 
         target_path: Path | None = None
         threads_file: ThreadsFile | None = None
@@ -915,7 +1003,7 @@ class LifecycleManager:
             raise ValueError(f"vol_id 必须为非空合法 VolumeId 字符串，收到: {vol_id!r}")
         validated_vol_id = _VOLUME_ID_ADAPTER.validate_python(vol_id.strip())
 
-        history_path = self._book_dir / "03_state" / "history" / f"{validated_vol_id}_facts.jsonl"
+        history_path = resolve_facts_file(self._book_dir, validated_vol_id, for_write=True)
         if not history_path.is_file():
             raise FileNotFoundError(f"未找到分卷历史事实台账: {history_path}")
 
@@ -983,8 +1071,8 @@ class LifecycleManager:
         thread_entities: set[str] = set()
         thread_chapters: set[int] = set()
         for t_path in (
-            self._book_dir / "03_state" / "threads.yaml",
-            self._book_dir / "03_state" / "archive" / "threads.yaml",
+            resolve_threads_file(self._book_dir),
+            resolve_archive_threads_file(self._book_dir),
         ):
             t_file = self._load_threads_file(t_path)
             for thr in t_file.threads:
@@ -1294,6 +1382,35 @@ class LifecycleManager:
                             )
                         )
 
+        # 3) 模型层设定卡 (01_设定集/) 具象污染检查（防台词/具体场景/预设动作直出到模型）
+        if chapter_num is None:
+            lint_targets = [
+                (doc, s_path)
+                for eid, (doc, s_path) in sorted(settings_map.items())
+                if doc.status == EntityStatus.ACTIVE and eid not in archived_ids
+            ]
+        else:
+            seen_target_ids: set[str] = set()
+            lint_targets = []
+            for bp, _ in target_blueprints:
+                for eid in bp.all_entity_ids():
+                    if eid in seen_target_ids or eid not in settings_map:
+                        continue
+                    seen_target_ids.add(eid)
+                    lint_targets.append(settings_map[eid])
+
+        for doc, s_path in lint_targets:
+            s_rel = self._rel_posix(s_path)
+            for leak_warn in lint_model_setting_doc(doc):
+                issues.append(
+                    AuditIssue(
+                        level=IssueLevel.WARNING,
+                        code="SETTING_CONCRETE_LEAK",
+                        message=f"设定卡 '{doc.id}' ({doc.name}) 混入作者层具象内容: {leak_warn}",
+                        location=s_rel,
+                    )
+                )
+
         return AuditReport(chapter=chapter_num, issues=issues)
 
     # ------------------------------------------------------------------
@@ -1308,7 +1425,7 @@ class LifecycleManager:
         ctx = {"genre_profile": genre}
 
         # 1. active/characters.yaml
-        chars_path = self._book_dir / "03_state" / "active" / "characters.yaml"
+        chars_path = resolve_active_characters_file(self._book_dir)
         if chars_path.is_file():
             chars_rel = self._rel_posix(chars_path)
             try:
@@ -1366,7 +1483,7 @@ class LifecycleManager:
                     )
 
         # 2. active/factions.yaml
-        facs_path = self._book_dir / "03_state" / "active" / "factions.yaml"
+        facs_path = resolve_active_factions_file(self._book_dir)
         if facs_path.is_file():
             facs_rel = self._rel_posix(facs_path)
             try:
@@ -1418,7 +1535,7 @@ class LifecycleManager:
                     )
 
         # 3. world_state.yaml
-        ws_path = self._book_dir / "03_state" / "world_state.yaml"
+        ws_path = resolve_world_state_file(self._book_dir)
         if ws_path.is_file():
             ws_rel = self._rel_posix(ws_path)
             try:
@@ -1437,7 +1554,7 @@ class LifecycleManager:
                 )
 
         # 4. relations.yaml
-        rel_path = self._book_dir / "03_state" / "relations.yaml"
+        rel_path = resolve_relations_file(self._book_dir)
         if rel_path.is_file():
             rel_posix = self._rel_posix(rel_path)
             try:
@@ -1468,7 +1585,7 @@ class LifecycleManager:
         active_threads: dict[str, Thread] = {}
         archived_threads: dict[str, Thread] = {}
 
-        thr_path = self._book_dir / "03_state" / "threads.yaml"
+        thr_path = resolve_threads_file(self._book_dir)
         if thr_path.is_file():
             thr_rel = self._rel_posix(thr_path)
             try:
@@ -1489,7 +1606,7 @@ class LifecycleManager:
                     )
                 )
 
-        arch_thr_path = self._book_dir / "03_state" / "archive" / "threads.yaml"
+        arch_thr_path = resolve_archive_threads_file(self._book_dir)
         if arch_thr_path.is_file():
             arch_rel = self._rel_posix(arch_thr_path)
             try:
@@ -1511,11 +1628,7 @@ class LifecycleManager:
         return active_threads, archived_threads
 
     def _audit_history_facts(self, chapter_num: int | None, issues: list[AuditIssue]) -> None:
-        history_dir = self._book_dir / "03_state" / "history"
-        if not history_dir.is_dir():
-            return
-
-        for path in sorted(history_dir.glob("*_facts.jsonl")):
+        for path in list_facts_files(self._book_dir):
             if not path.is_file():
                 continue
             rel = self._rel_posix(path)
@@ -1596,7 +1709,7 @@ class LifecycleManager:
         self._warn_model_extra(inst, label=label, location=location, issues=issues)
 
     def _load_style_guide(self, issues: list[AuditIssue]) -> StyleGuide | None:
-        sg_path = self._book_dir / "04_creation" / "style_guide.md"
+        sg_path = resolve_style_guide_file(self._book_dir)
         if not sg_path.is_file():
             return None
         sg_rel = self._rel_posix(sg_path)
@@ -1785,7 +1898,7 @@ class LifecycleManager:
         hits: list[ImpactHit] = []
 
         # 1) MANUSCRIPT
-        ms_root = self._book_dir / "04_creation" / "manuscript"
+        ms_root = resolve_manuscript_dir(self._book_dir)
         if ms_root.is_dir():
             for path in sorted(ms_root.rglob("*.md")):
                 if not path.is_file():
@@ -1852,7 +1965,7 @@ class LifecycleManager:
                         )
 
         # 3) STATE (默认仅扫描活跃热状态)
-        chars_path = self._book_dir / "03_state" / "active" / "characters.yaml"
+        chars_path = resolve_active_characters_file(self._book_dir)
         if chars_path.is_file():
             chars_rel = self._rel_posix(chars_path)
             chars_file = self._load_character_state_file(chars_path)
@@ -1876,7 +1989,7 @@ class LifecycleManager:
                         )
                     )
 
-        facs_path = self._book_dir / "03_state" / "active" / "factions.yaml"
+        facs_path = resolve_active_factions_file(self._book_dir)
         if facs_path.is_file():
             facs_rel = self._rel_posix(facs_path)
             facs_file = self._load_faction_state_file(facs_path)
@@ -1902,7 +2015,7 @@ class LifecycleManager:
                         )
                     )
 
-        ws_path = self._book_dir / "03_state" / "world_state.yaml"
+        ws_path = resolve_world_state_file(self._book_dir)
         if ws_path.is_file():
             raw_ws = yaml.safe_load(ws_path.read_text(encoding="utf-8"))
             if isinstance(raw_ws, dict):
@@ -1920,7 +2033,7 @@ class LifecycleManager:
                         )
                     )
 
-        rel_path = self._book_dir / "03_state" / "relations.yaml"
+        rel_path = resolve_relations_file(self._book_dir)
         if rel_path.is_file():
             rel_posix = self._rel_posix(rel_path)
             rel_file = self._load_relations_file(rel_path)
@@ -1945,7 +2058,7 @@ class LifecycleManager:
                     )
 
         # 4) THREAD (未完结伏笔)
-        thr_path = self._book_dir / "03_state" / "threads.yaml"
+        thr_path = resolve_threads_file(self._book_dir)
         if thr_path.is_file():
             thr_posix = self._rel_posix(thr_path)
             thr_file = self._load_threads_file(thr_path)
@@ -2012,7 +2125,7 @@ class LifecycleManager:
 
     def _load_all_settings(self) -> dict[str, tuple[SettingDoc, Path]]:
         results: dict[str, tuple[SettingDoc, Path]] = {}
-        settings_dir = self._book_dir / "01_settings"
+        settings_dir = resolve_settings_root(self._book_dir)
         if not settings_dir.is_dir():
             return results
         for path in sorted(settings_dir.rglob("*.md")):
@@ -2023,7 +2136,7 @@ class LifecycleManager:
         return results
 
     def _load_blueprints_with_paths(self) -> list[tuple[BlueprintDoc, Path]]:
-        bp_root = self._book_dir / "02_structure" / "blueprints"
+        bp_root = resolve_blueprints_dir(self._book_dir)
         if not bp_root.is_dir():
             return []
         results: list[tuple[BlueprintDoc, Path]] = []
@@ -2038,8 +2151,8 @@ class LifecycleManager:
     def _collect_prose_files(self, chapter_num: int | None) -> list[tuple[int | None, Path]]:
         collected: list[tuple[int | None, Path]] = []
         for sub_dir in (
-            self._book_dir / "04_creation" / "drafts",
-            self._book_dir / "04_creation" / "manuscript",
+            resolve_drafts_dir(self._book_dir),
+            resolve_manuscript_dir(self._book_dir),
         ):
             if not sub_dir.is_dir():
                 continue
@@ -2056,21 +2169,21 @@ class LifecycleManager:
     def _collect_archived_state_ids(self) -> set[str]:
         archived: set[str] = set()
         active_chars = self._load_character_state_file(
-            self._book_dir / "03_state" / "active" / "characters.yaml"
+            resolve_active_characters_file(self._book_dir)
         )
         arch_chars = self._load_character_state_file(
-            self._book_dir / "03_state" / "archive" / "characters.yaml"
+            resolve_archive_characters_file(self._book_dir)
         )
         archived.update(set(arch_chars.root.keys()) - set(active_chars.root.keys()))
 
         active_facs = self._load_faction_state_file(
-            self._book_dir / "03_state" / "active" / "factions.yaml"
+            resolve_active_factions_file(self._book_dir)
         )
         awake_fids = {
             fid for fid, f_state in active_facs.root.items() if f_state.status == EntityStatus.ACTIVE
         }
         arch_facs = self._load_faction_state_file(
-            self._book_dir / "03_state" / "archive" / "factions.yaml"
+            resolve_archive_factions_file(self._book_dir)
         )
         archived.update(set(arch_facs.root.keys()) - awake_fids)
         for fid, f_state in active_facs.root.items():
@@ -2080,10 +2193,7 @@ class LifecycleManager:
 
     def _collect_max_fact_chapter_by_entity(self) -> dict[str, int]:
         max_ch: dict[str, int] = {}
-        history_dir = self._book_dir / "03_state" / "history"
-        if not history_dir.is_dir():
-            return max_ch
-        for path in sorted(history_dir.glob("*_facts.jsonl")):
+        for path in list_facts_files(self._book_dir):
             if not path.is_file():
                 continue
             for raw_line in path.read_text(encoding="utf-8").splitlines():

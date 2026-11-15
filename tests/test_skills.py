@@ -80,7 +80,7 @@ def test_skill_file_exists_and_frontmatter_conforms_to_opencode_and_dsh_specs(ro
 
     compatibility = fm.get("compatibility")
     assert isinstance(compatibility, list)
-    assert {"opencode", "dsh", "claude"} <= set(compatibility)
+    assert {"opencode", "dsh", "claude", "antigravity"} <= set(compatibility)
 
     triggers = fm.get("triggers")
     assert isinstance(triggers, list) and len(triggers) >= 3
@@ -93,7 +93,7 @@ def test_skill_file_exists_and_frontmatter_conforms_to_opencode_and_dsh_specs(ro
     # 2. 扩展 metadata 结构校验
     meta = fm.get("metadata")
     assert isinstance(meta, dict)
-    assert meta.get("hosts") == ["opencode", "dsh", "claude"]
+    assert meta.get("hosts") == ["opencode", "dsh", "claude", "antigravity"]
     assert isinstance(meta.get("role"), str) and meta["role"]
     assert isinstance(meta.get("display_name"), str) and meta["display_name"]
     assert isinstance(meta.get("phase"), str) and meta["phase"]
@@ -119,13 +119,14 @@ def test_init_book_copies_all_four_skill_md_files_to_all_three_hosts(tmp_path: P
     result = init_book(
         book_dir,
         title="四角色技能同步测试",
-        hosts=["opencode", "dsh", "claude"],
+        hosts=["opencode", "dsh", "claude", "antigravity"],
     )
 
     host_skill_roots = (
         book_dir / ".opencode" / "skills",
         book_dir / ".dsh" / "skills",
         book_dir / ".claude" / "skills",
+        book_dir / ".agents" / "plugins" / "ddnovel" / "skills",
     )
 
     for host_root in host_skill_roots:
@@ -140,19 +141,42 @@ def test_init_book_copies_all_four_skill_md_files_to_all_three_hosts(tmp_path: P
 def test_render_host_configs_respects_overwrite_flag_for_skills(tmp_path: Path):
     book_dir = tmp_path / "custom_skill_book"
     initializer = ProjectInitializer()
-    initializer.init_book(book_dir, title="技能覆盖保护测试", hosts=[HostKind.OPENCODE])
+    initializer.init_book(
+        book_dir,
+        title="技能覆盖保护测试",
+        hosts=[HostKind.OPENCODE, HostKind.ANTIGRAVITY],
+    )
 
-    custom_path = book_dir / ".opencode" / "skills" / "dd-chapter-writer" / "SKILL.md"
-    custom_path.write_text("# 作者自定义执笔技能\n", encoding="utf-8")
+    for custom_path in (
+        book_dir / ".opencode" / "skills" / "dd-chapter-writer" / "SKILL.md",
+        book_dir / ".agents" / "plugins" / "ddnovel" / "skills" / "dd-chapter-writer" / "SKILL.md",
+    ):
+        custom_path.write_text("# 作者自定义执笔技能\n", encoding="utf-8")
 
     # overwrite=False 时保留作者在书库内自定义的 SKILL.md
-    initializer.render_host_configs(book_dir, [HostKind.OPENCODE], overwrite=False)
-    assert custom_path.read_text(encoding="utf-8") == "# 作者自定义执笔技能\n"
+    initializer.render_host_configs(
+        book_dir,
+        [HostKind.OPENCODE, HostKind.ANTIGRAVITY],
+        overwrite=False,
+    )
+    for custom_path in (
+        book_dir / ".opencode" / "skills" / "dd-chapter-writer" / "SKILL.md",
+        book_dir / ".agents" / "plugins" / "ddnovel" / "skills" / "dd-chapter-writer" / "SKILL.md",
+    ):
+        assert custom_path.read_text(encoding="utf-8") == "# 作者自定义执笔技能\n"
 
     # overwrite=True 时恢复为引擎内置标准 SKILL.md
-    initializer.render_host_configs(book_dir, [HostKind.OPENCODE], overwrite=True)
+    initializer.render_host_configs(
+        book_dir,
+        [HostKind.OPENCODE, HostKind.ANTIGRAVITY],
+        overwrite=True,
+    )
     expected = (TEMPLATES_SKILLS_DIR / "dd-chapter-writer" / "SKILL.md").read_text(encoding="utf-8")
-    assert custom_path.read_text(encoding="utf-8") == expected
+    for custom_path in (
+        book_dir / ".opencode" / "skills" / "dd-chapter-writer" / "SKILL.md",
+        book_dir / ".agents" / "plugins" / "ddnovel" / "skills" / "dd-chapter-writer" / "SKILL.md",
+    ):
+        assert custom_path.read_text(encoding="utf-8") == expected
 
 
 # ---------------------------------------------------------------------------
@@ -177,15 +201,15 @@ def test_setting_architect_skill_domain_requirements():
 
     # 5 类设定目录 + 三级渐进式切片 + 演进 vs 改设定区分 + 五维影响面扫描
     for required_token in (
-        "01_settings/world",
-        "01_settings/geography",
-        "01_settings/factions",
-        "01_settings/characters",
-        "01_settings/items",
+        "01_设定集/世界观",
+        "01_设定集/地理",
+        "01_设定集/势力",
+        "01_设定集/人物",
+        "01_设定集/器物",
         "## [核心]",
         "## [专题:",
         "## [机密]",
-        "03_state/",
+        "03_状态/",
         "novel_setting_impact",
         "ddnovel setting impact",
         "novel_sync_index",
@@ -215,10 +239,10 @@ def test_structure_planner_skill_domain_requirements():
 
     # 三级结构文件 + 章节蓝图核心字段 + 三类伏笔雷达 + 五槽位单章写作包编译
     for required_token in (
-        "02_structure/master_outline.md",
-        "02_structure/volumes/vol_XX.md",
-        "02_structure/arcs/vol_XX_arc_YY.md",
-        "02_structure/blueprints/vol_XX/ch_XXXX.md",
+        "02_结构/总纲.md",
+        "02_结构/分卷/第XX卷-<卷名>.md",
+        "02_结构/单元/第XX卷_第YY单元-<单元名>.md",
+        "02_结构/章节蓝图/第XX卷/第XXXX章-<章节标题>.md",
         "pov",
         "cast",
         "threads",
@@ -234,7 +258,7 @@ def test_structure_planner_skill_domain_requirements():
         "world_and_facts",
         "entities",
         "continuity",
-        "04_creation/packets/ch_XXXX_packet.md",
+        "04_创作/写作包/第XXXX章_写作包.md",
     ):
         assert required_token in body, f"dd-structure-planner 缺少关键规范内容: {required_token}"
 
@@ -258,20 +282,20 @@ def test_chapter_writer_strict_context_isolation_iron_law():
         assert leaked_tool in forbidden_tools
 
     forbidden_dirs = set(fm["metadata"].get("forbidden_directories", []))
-    assert {"01_settings", "02_structure", "03_state", "04_creation/manuscript"} <= forbidden_dirs
+    assert {"01_设定集", "02_结构", "03_状态", "04_创作/定稿"} <= forbidden_dirs
 
     # 2. 正文必须明确锁死“上下文隔离铁律”与唯一输入/输出路径
     for required_token in (
         "上下文隔离铁律",
-        "04_creation/packets/ch_XXXX_packet.md",
+        "04_创作/写作包/第XXXX章_写作包.md",
         "novel_read_packet",
-        "04_creation/drafts/ch_XXXX_draft.md",
+        "04_创作/草稿/第XXXX章_草稿.md",
         "novel_save_draft",
         "ddnovel draft save",
-        "01_settings/",
-        "02_structure/",
-        "03_state/",
-        "04_creation/manuscript/",
+        "01_设定集/",
+        "02_结构/",
+        "03_状态/",
+        "04_创作/定稿/",
         "unaware_of",
         "## [机密]",
         "truth_secret",
@@ -302,15 +326,15 @@ def test_state_curator_skill_domain_requirements():
         "ddnovel audit",
         "novel_promote_chapter",
         "ddnovel chapter promote",
-        "vol_XX_facts.jsonl",
-        "03_state/world_state.yaml",
-        "03_state/active/characters.yaml",
-        "03_state/active/factions.yaml",
-        "03_state/relations.yaml",
-        "03_state/threads.yaml",
+        "第XX卷_事实.jsonl",
+        "03_状态/世界状态.yaml",
+        "03_状态/当前/人物状态.yaml",
+        "03_状态/当前/势力状态.yaml",
+        "03_状态/人物关系.yaml",
+        "03_状态/伏笔台账.yaml",
         "novel_record_chapter_outcome",
         "ddnovel state update",
-        "01_settings/",
+        "01_设定集/",
         "novel_cold_archive",
         "ddnovel state gc",
         "novel_prune_unused",
@@ -383,5 +407,38 @@ def test_all_blueprint_mcp_tools_and_cli_domains_covered_across_skills():
         "ddnovel thread drop",
         "ddnovel history compact",
         "ddnovel audit",
+        "ddnovel setting lint",
     ):
         assert cli_cmd in combined_text, f"四角色 SKILL.md 未覆盖 CLI 命令: {cli_cmd}"
+
+
+def test_two_layer_setting_isolation_contracts():
+    """验证双层设定隔离（00_作者设定/ -> 01_设定集/）在四角色技能契约中的权限与铁律。"""
+    arch_fm, arch_body = _parse_skill_markdown(
+        TEMPLATES_SKILLS_DIR / "dd-setting-architect" / "SKILL.md"
+    )
+    assert "00_作者设定" in arch_fm["metadata"]["ssot_directories"]
+    assert "ddnovel setting lint" in arch_fm["metadata"]["cli_commands"]
+    assert "三留三剥离" in arch_body
+
+    planner_fm, planner_body = _parse_skill_markdown(
+        TEMPLATES_SKILLS_DIR / "dd-structure-planner" / "SKILL.md"
+    )
+    assert "00_作者设定" not in planner_fm["metadata"]["ssot_directories"]
+    assert "00_作者设定" in planner_body
+
+    writer_fm, writer_body = _parse_skill_markdown(
+        TEMPLATES_SKILLS_DIR / "dd-chapter-writer" / "SKILL.md"
+    )
+    assert writer_fm["allowed-tools"] == ["novel_read_packet", "novel_save_draft"]
+    assert "00_作者设定" in writer_fm["metadata"]["forbidden_directories"]
+    assert "00_作者设定" in writer_body
+    assert "打卡" in writer_body
+
+    curator_fm, curator_body = _parse_skill_markdown(
+        TEMPLATES_SKILLS_DIR / "dd-state-curator" / "SKILL.md"
+    )
+    assert "00_作者设定" not in curator_fm["metadata"]["ssot_directories"]
+    assert "00_作者设定" in curator_body
+    assert "SETTING_CONCRETE_LEAK" in curator_body
+    assert "三留三剥离" in curator_body

@@ -23,7 +23,6 @@ from ddnovel.core.schemas import (
     EmbeddingConfig,
     NovelConfig,
     SlotName,
-    format_chapter,
 )
 from ddnovel.mcp_server import create_server
 from ddnovel.templates.initializer import SKILL_ROLES, init_book
@@ -137,7 +136,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     # ==================================================================
     # 1) 文风红线
     _write_md(
-        book_dir / "04_creation" / "style_guide.md",
+        book_dir / "04_创作" / "文风指南.md",
         {
             "tone": "古典仙侠冷峻凝练",
             "pov_rules": ["严守第三人称限制视角，禁止全知剧透"],
@@ -148,7 +147,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
 
     # 2) 核心角色与重名消歧角色
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_linfan.md",
+        book_dir / "01_设定集" / "人物" / "char_linfan.md",
         {
             "id": "char_linfan",
             "name": "林凡",
@@ -169,7 +168,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         ),
     )
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_linfanchen.md",
+        book_dir / "01_设定集" / "人物" / "char_linfanchen.md",
         {
             "id": "char_linfanchen",
             "name": "林凡尘",
@@ -180,7 +179,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         "## [核心]\n青云外门游历散修，善阵法与灵符推演，与林凡非同一人。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_shenxiao.md",
+        book_dir / "01_设定集" / "人物" / "char_shenxiao.md",
         {
             "id": "char_shenxiao",
             "name": "沈霄",
@@ -196,7 +195,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         ),
     )
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_mentor_su.md",
+        book_dir / "01_设定集" / "人物" / "char_mentor_su.md",
         {
             "id": "char_mentor_su",
             "name": "苏玄衣",
@@ -207,7 +206,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         "## [核心]\n青云剑宗太上长老，林凡恩师，第四十章宣布入后山死关参悟化神之境。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_protected_spy.md",
+        book_dir / "01_设定集" / "人物" / "char_protected_spy.md",
         {
             "id": "char_protected_spy",
             "name": "影无踪",
@@ -238,7 +237,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
             npc_status = "active"
 
         _write_md(
-            book_dir / "01_settings" / "characters" / f"{eid}.md",
+            book_dir / "01_设定集" / "人物" / f"{eid}.md",
             {
                 "id": eid,
                 "name": npc_name,
@@ -256,55 +255,55 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     ]
     for cid, cname in cameo_specs:
         _write_md(
-            book_dir / "01_settings" / "characters" / f"{cid}.md",
+            book_dir / "01_设定集" / "人物" / f"{cid}.md",
             {"id": cid, "name": cname, "category": "character", "status": "active"},
             f"## [核心]\n早年驿道偶遇的凡俗人物{cname}。\n",
         )
 
     # 3 个全书零引用废案孤儿 + 1 个物理删除级联验证道具
     _write_md(
-        book_dir / "01_settings" / "characters" / "char_orphan_draft.md",
+        book_dir / "01_设定集" / "人物" / "char_orphan_draft.md",
         {"id": "char_orphan_draft", "name": "废案路人甲", "category": "character", "status": "active"},
         "## [核心]\n开篇构思阶段废弃未用的人物卡。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "geography" / "loc_orphan_island.md",
+        book_dir / "01_设定集" / "地理" / "loc_orphan_island.md",
         {"id": "loc_orphan_island", "name": "废案孤岛", "category": "geography", "status": "active"},
         "## [核心]\n废弃构想的无名海外孤岛。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "items" / "item_orphan_bell.md",
+        book_dir / "01_设定集" / "器物" / "item_orphan_bell.md",
         {"id": "item_orphan_bell", "name": "废案残铃", "category": "item", "status": "active"},
         "## [核心]\n从未在正文与蓝图中出现的废案法器。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "items" / "item_temp_talisman.md",
+        book_dir / "01_设定集" / "器物" / "item_temp_talisman.md",
         {"id": "item_temp_talisman", "name": "破界符", "category": "item", "status": "active"},
         "## [核心]\n作者决定直接删除的临时符箓设定，用于检验索引零残留。\n",
     )
 
     # 地理 / 势力 / 法则 / 无 Frontmatter 纯手写 Markdown 设定
     _write_md(
-        book_dir / "01_settings" / "geography" / "loc_abyss.md",
+        book_dir / "01_设定集" / "地理" / "loc_abyss.md",
         {"id": "loc_abyss", "name": "归墟深渊", "category": "geography", "status": "active"},
         "## [核心]\n极北尽头的万丈裂谷，青铜巨门镇封太古黑印。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "geography" / "loc_sect.md",
+        book_dir / "01_设定集" / "地理" / "loc_sect.md",
         {"id": "loc_sect", "name": "青云山门", "category": "geography", "status": "active"},
         "## [核心]\n东域正道剑修圣地，七峰耸峙云海之上。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "factions" / "fac_qingyun.md",
+        book_dir / "01_设定集" / "势力" / "fac_qingyun.md",
         {"id": "fac_qingyun", "name": "青云剑宗", "category": "faction", "status": "active"},
         "## [核心]\n传承万年的东域剑修大宗。\n",
     )
     _write_md(
-        book_dir / "01_settings" / "rules" / "rule_heavens.md",
+        book_dir / "01_设定集" / "世界观" / "rule_heavens.md",
         {"id": "rule_heavens", "name": "九霄天道压制法则", "category": "rule", "status": "active"},
         "## [核心]\n归墟百里之内元神神识受天道余威压制。\n",
     )
-    freeform_path = book_dir / "01_settings" / "items" / "自在残剑谱.md"
+    freeform_path = book_dir / "01_设定集" / "器物" / "自在残剑谱.md"
     freeform_path.parent.mkdir(parents=True, exist_ok=True)
     freeform_path.write_text(
         "# 自在残剑谱\n\n"
@@ -317,7 +316,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
 
     # 3) 分卷与单元纲要（vol_01: 1..60, vol_02: 61..120）
     _write_md(
-        book_dir / "02_structure" / "volumes" / "vol_01.md",
+        book_dir / "02_结构" / "分卷" / "第01卷.md",
         {
             "id": "vol_01",
             "title": "第一卷 青云潜龙",
@@ -328,7 +327,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         "第一卷完结纲要。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "volumes" / "vol_02.md",
+        book_dir / "02_结构" / "分卷" / "第02卷.md",
         {
             "id": "vol_02",
             "title": "第二卷 归墟问剑",
@@ -338,12 +337,12 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         "第二卷连载中纲要。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "arcs" / "vol_01_arc_01.md",
+        book_dir / "02_结构" / "单元" / "第01卷_第01单元.md",
         {"id": "vol_01_arc_01", "volume_id": "vol_01", "title": "潜龙出渊", "chapter_range": [1, 60]},
         "第一卷主单元。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "arcs" / "vol_02_arc_01.md",
+        book_dir / "02_结构" / "单元" / "第02卷_第01单元.md",
         {"id": "vol_02_arc_01", "volume_id": "vol_02", "title": "归墟封魔", "chapter_range": [61, 120]},
         "第二卷主单元。\n",
     )
@@ -353,7 +352,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     cfg.dump(book_dir)
 
     _write_yaml(
-        book_dir / "03_state" / "world_state.yaml",
+        book_dir / "03_状态" / "世界状态.yaml",
         {
             "current_chapter": 105,
             "in_world_time": "元和九十三年寒露",
@@ -416,10 +415,10 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
             "physical_mental": "第一卷旧人状态",
             "current_goals": ["第一卷往事"],
         }
-    _write_yaml(book_dir / "03_state" / "active" / "characters.yaml", active_chars)
+    _write_yaml(book_dir / "03_状态" / "当前" / "人物状态.yaml", active_chars)
 
     _write_yaml(
-        book_dir / "03_state" / "active" / "factions.yaml",
+        book_dir / "03_状态" / "当前" / "势力状态.yaml",
         {
             "fac_qingyun": {
                 "updated_at_ch": 105,
@@ -432,7 +431,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     )
 
     _write_yaml(
-        book_dir / "03_state" / "relations.yaml",
+        book_dir / "03_状态" / "人物关系.yaml",
         {
             "relations": [
                 {
@@ -468,7 +467,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     )
 
     _write_yaml(
-        book_dir / "03_state" / "threads.yaml",
+        book_dir / "03_状态" / "伏笔台账.yaml",
         {
             "threads": [
                 {
@@ -525,7 +524,8 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     for ch in range(1, 106):
         vol_id = "vol_01" if ch <= 60 else "vol_02"
         arc_id = "vol_01_arc_01" if ch <= 60 else "vol_02_arc_01"
-        ms_path = book_dir / "04_creation" / "manuscript" / vol_id / f"{format_chapter(ch)}.md"
+        vol_zh = "第01卷" if vol_id == "vol_01" else "第02卷"
+        ms_path = book_dir / "04_创作" / "定稿" / vol_zh / f"第{ch:04d}章.md"
         ms_path.parent.mkdir(parents=True, exist_ok=True)
 
         if ch == 55:
@@ -606,16 +606,16 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         else:
             vol2_fact_lines.append(fact_rec)
 
-    (book_dir / "03_state" / "history" / "vol_01_facts.jsonl").write_text(
+    (book_dir / "03_状态" / "历史" / "第01卷_事实.jsonl").write_text(
         "\n".join(vol1_fact_lines) + "\n", encoding="utf-8"
     )
-    (book_dir / "03_state" / "history" / "vol_02_facts.jsonl").write_text(
+    (book_dir / "03_状态" / "历史" / "第02卷_事实.jsonl").write_text(
         "\n".join(vol2_fact_lines) + "\n", encoding="utf-8"
     )
 
     # 6) 构造第 106~108 章写作蓝图
     _write_md(
-        book_dir / "02_structure" / "blueprints" / "vol_02" / "ch_0106.md",
+        book_dir / "02_结构" / "章节蓝图" / "第02卷" / "第0106章.md",
         {
             "chapter": 106,
             "volume_id": "vol_02",
@@ -640,7 +640,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         ),
     )
     _write_md(
-        book_dir / "02_structure" / "blueprints" / "vol_02" / "ch_0107.md",
+        book_dir / "02_结构" / "章节蓝图" / "第02卷" / "第0107章.md",
         {
             "chapter": 107,
             "volume_id": "vol_02",
@@ -658,7 +658,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         "### 节拍 1: 圣体觉醒破封\n林凡引动体内血脉，彻底破开归墟黑印，查清祖师当年留下的真容。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "blueprints" / "vol_02" / "ch_0108.md",
+        book_dir / "02_结构" / "章节蓝图" / "第02卷" / "第0108章.md",
         {
             "chapter": 108,
             "volume_id": "vol_02",
@@ -674,8 +674,8 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     )
 
     # 7) 预置超期过程产物（TTL=5，第 106 章定稿时应被自动清理）
-    expired_pkt = book_dir / "04_creation" / "packets" / "ch_0080_packet.md"
-    expired_draft = book_dir / "04_creation" / "drafts" / "ch_0080_draft.md"
+    expired_pkt = book_dir / "04_创作" / "写作包" / "第0080章_写作包.md"
+    expired_draft = book_dir / "04_创作" / "草稿" / "第0080章_草稿.md"
     expired_pkt.parent.mkdir(parents=True, exist_ok=True)
     expired_draft.parent.mkdir(parents=True, exist_ok=True)
     expired_pkt.write_text("# 第80章旧写作包\n", encoding="utf-8")
@@ -707,7 +707,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     assert impact_cli.exit_code == 0, impact_cli.output
 
     # 物理删卡级联测试
-    (book_dir / "01_settings" / "items" / "item_temp_talisman.md").unlink()
+    (book_dir / "01_设定集" / "器物" / "item_temp_talisman.md").unlink()
     sync_del_cli = cli_runner.invoke(app, ["index", "sync", "-d", str(book_dir)])
     assert sync_del_cli.exit_code == 0, sync_del_cli.output
     with SqliteIndexer(book_dir) as idx:
@@ -723,8 +723,8 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     )
     assert gc_cli.exit_code == 0, gc_cli.output
 
-    active_after_gc = _read_yaml(book_dir / "03_state" / "active" / "characters.yaml")
-    archive_after_gc = _read_yaml(book_dir / "03_state" / "archive" / "characters.yaml")
+    active_after_gc = _read_yaml(book_dir / "03_状态" / "当前" / "人物状态.yaml")
+    archive_after_gc = _read_yaml(book_dir / "03_状态" / "归档" / "人物状态.yaml")
     assert "char_mentor_su" not in active_after_gc
     assert "char_mentor_su" in archive_after_gc
     for idx_num in range(1, 26):
@@ -735,8 +735,8 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     assert "char_protected_spy" in active_after_gc
     assert "char_protected_spy" not in archive_after_gc
 
-    active_rels = _read_yaml(book_dir / "03_state" / "relations.yaml")["relations"]
-    archived_rels = _read_yaml(book_dir / "03_state" / "archive" / "relations.yaml")["relations"]
+    active_rels = _read_yaml(book_dir / "03_状态" / "人物关系.yaml")["relations"]
+    archived_rels = _read_yaml(book_dir / "03_状态" / "归档" / "人物关系.yaml")["relations"]
     assert len(archived_rels) == 2
     assert {r["relation"] for r in active_rels} == {"归墟暂结血盟", "戴罪协防"}
 
@@ -747,7 +747,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     assert drop_dry.exit_code == 0, drop_dry.output
     assert any(
         t["id"] == "thread_abandoned_sidequest"
-        for t in _read_yaml(book_dir / "03_state" / "threads.yaml")["threads"]
+        for t in _read_yaml(book_dir / "03_状态" / "伏笔台账.yaml")["threads"]
     )
 
     drop_cli = cli_runner.invoke(
@@ -756,7 +756,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
     assert drop_cli.exit_code == 0, drop_cli.output
     assert all(
         t["id"] != "thread_abandoned_sidequest"
-        for t in _read_yaml(book_dir / "03_state" / "threads.yaml")["threads"]
+        for t in _read_yaml(book_dir / "03_状态" / "伏笔台账.yaml")["threads"]
     )
 
     # 3) 废案孤儿与远期龙套物理剪枝 (先 dry-run 再 apply)
@@ -764,24 +764,24 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         app, ["setting", "prune", "--current-chapter", "105", "-d", str(book_dir)]
     )
     assert prune_dry.exit_code == 0, prune_dry.output
-    assert (book_dir / "01_settings" / "characters" / "char_orphan_draft.md").is_file()
+    assert (book_dir / "01_设定集" / "人物" / "char_orphan_draft.md").is_file()
 
     prune_apply = cli_runner.invoke(
         app, ["setting", "prune", "--apply", "--current-chapter", "105", "-d", str(book_dir)]
     )
     assert prune_apply.exit_code == 0, prune_apply.output
-    assert not (book_dir / "01_settings" / "characters" / "char_orphan_draft.md").exists()
-    assert not (book_dir / "01_settings" / "geography" / "loc_orphan_island.md").exists()
-    assert not (book_dir / "01_settings" / "items" / "item_orphan_bell.md").exists()
+    assert not (book_dir / "01_设定集" / "人物" / "char_orphan_draft.md").exists()
+    assert not (book_dir / "01_设定集" / "地理" / "loc_orphan_island.md").exists()
+    assert not (book_dir / "01_设定集" / "器物" / "item_orphan_bell.md").exists()
     for cid, _ in cameo_specs:
-        assert not (book_dir / "01_settings" / "characters" / f"{cid}.md").exists()
+        assert not (book_dir / "01_设定集" / "人物" / f"{cid}.md").exists()
 
     # 4) 远期完结卷事实蒸馏浓缩
     compact_cli = cli_runner.invoke(app, ["history", "compact", "vol_01", "-d", str(book_dir)])
     assert compact_cli.exit_code == 0, compact_cli.output
     compacted_lines = [
         ln
-        for ln in (book_dir / "03_state" / "history" / "vol_01_facts.jsonl")
+        for ln in (book_dir / "03_状态" / "历史" / "第01卷_事实.jsonl")
         .read_text(encoding="utf-8")
         .splitlines()
         if ln.strip()
@@ -873,7 +873,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         )
         assert pkt_106["ok"] is True
         content_106 = pkt_106["content"]
-        assert (book_dir / "04_creation" / "packets" / "ch_0106_packet.md").is_file()
+        assert (book_dir / "04_创作" / "写作包" / "第0106章_写作包.md").is_file()
 
         # 校验 U 型五槽位严格先后顺序
         slot_headers = [
@@ -963,7 +963,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
             app, ["chapter", "promote", "106", "--volume-id", "vol_02", "-d", str(book_dir)]
         )
         assert promote_ok_cli.exit_code == 0, promote_ok_cli.output
-        assert (book_dir / "04_creation" / "manuscript" / "vol_02" / "ch_0106.md").is_file()
+        assert (book_dir / "04_创作" / "定稿" / "第02卷" / "第0106章-深渊探印.md").is_file()
         assert not expired_pkt.exists(), "TTL=5 应自动清理第 80 章过期写作包"
         assert not expired_draft.exists(), "TTL=5 应自动清理第 80 章过期草稿"
 
@@ -1128,8 +1128,8 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
         assert wake_cli.exit_code == 0, wake_cli.output
 
         # 校验冷库 YAML 已移除、热池已回归且扩展字段无损保留
-        act_chars = _read_yaml(book_dir / "03_state" / "active" / "characters.yaml")
-        arch_chars = _read_yaml(book_dir / "03_state" / "archive" / "characters.yaml")
+        act_chars = _read_yaml(book_dir / "03_状态" / "当前" / "人物状态.yaml")
+        arch_chars = _read_yaml(book_dir / "03_状态" / "归档" / "人物状态.yaml")
         assert "char_mentor_su" in act_chars and "char_mentor_su" not in arch_chars
         assert "char_v1_npc_15" in act_chars and "char_v1_npc_15" not in arch_chars
         assert act_chars["char_mentor_su"]["profile_ext"]["key_items"] == ["玄衣古剑"]
@@ -1200,7 +1200,7 @@ def test_e2e_hundred_chapters_full_lifecycle_evolution(tmp_path: Path) -> None:
             )
         )
         assert promote_108["ok"] is True
-        assert (book_dir / "04_creation" / "manuscript" / "vol_02" / "ch_0108.md").is_file()
+        assert (book_dir / "04_创作" / "定稿" / "第02卷" / "第0108章-剑尊破关.md").is_file()
 
     asyncio.run(_run_mcp_loop())
     shutil.rmtree(book_dir)
@@ -1221,12 +1221,12 @@ def test_e2e_multi_book_decoupling_and_vector_hybrid_rrf(tmp_path: Path) -> None
 
     # general 题材支持任意自由扩展字段
     _write_md(
-        book_general / "01_settings" / "characters" / "char_ceo.md",
+        book_general / "01_设定集" / "人物" / "char_ceo.md",
         {"id": "char_ceo", "name": "周明远", "category": "character", "status": "active"},
         "## [核心]\n星海科技董事长，专注芯片供应链并购。\n",
     )
     _write_yaml(
-        book_general / "03_state" / "active" / "characters.yaml",
+        book_general / "03_状态" / "当前" / "人物状态.yaml",
         {
             "char_ceo": {
                 "updated_at_ch": 1,
@@ -1252,7 +1252,7 @@ def test_e2e_multi_book_decoupling_and_vector_hybrid_rrf(tmp_path: Path) -> None
     mystery_cfg.dump(book_mystery)
 
     _write_md(
-        book_mystery / "01_settings" / "characters" / "char_detective.md",
+        book_mystery / "01_设定集" / "人物" / "char_detective.md",
         {
             "id": "char_detective",
             "name": "陆沉",
@@ -1263,7 +1263,7 @@ def test_e2e_multi_book_decoupling_and_vector_hybrid_rrf(tmp_path: Path) -> None
         "## [核心]\n隐居雾都钟表行的前刑侦顾问，擅从微物线索推演不在场证明。\n",
     )
     _write_yaml(
-        book_mystery / "03_state" / "active" / "characters.yaml",
+        book_mystery / "03_状态" / "当前" / "人物状态.yaml",
         {
             "char_detective": {
                 "updated_at_ch": 12,
@@ -1283,7 +1283,7 @@ def test_e2e_multi_book_decoupling_and_vector_hybrid_rrf(tmp_path: Path) -> None
             }
         },
     )
-    (book_mystery / "03_state" / "history" / "vol_01_facts.jsonl").write_text(
+    (book_mystery / "03_状态" / "历史" / "第01卷_事实.jsonl").write_text(
         ChapterFactRecord(
             ch=12,
             volume_id="vol_01",
@@ -1392,7 +1392,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
     cfg.dump(book_dir)
 
     _write_yaml(
-        book_dir / "03_state" / "world_state.yaml",
+        book_dir / "03_状态" / "世界状态.yaml",
         {
             "current_chapter": 1000,
             "in_world_time": "九劫历千年",
@@ -1400,21 +1400,21 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
         },
     )
     _write_md(
-        book_dir / "04_creation" / "style_guide.md",
+        book_dir / "04_创作" / "文风指南.md",
         {"tone": "宏大古典", "pov_rules": ["第三人称主角限知视角"], "banned_words": ["出戏词汇"]},
         "行文流畅大气，契合长篇修仙史诗质感。\n",
     )
 
     # 1) 500 个设定卡片（覆盖五大分类目录，含核心/专题/机密切片）
     cat_dirs = [
-        ("characters", "character", "char_bench"),
-        ("factions", "faction", "fac_bench"),
-        ("geography", "geography", "loc_bench"),
-        ("items", "item", "item_bench"),
-        ("rules", "rule", "rule_bench"),
+        ("人物", "character", "char_bench"),
+        ("势力", "faction", "fac_bench"),
+        ("地理", "geography", "loc_bench"),
+        ("器物", "item", "item_bench"),
+        ("世界观", "rule", "rule_bench"),
     ]
     for idx_cat, (sub_dir, cat_name, id_prefix) in enumerate(cat_dirs):
-        target_dir = book_dir / "01_settings" / sub_dir
+        target_dir = book_dir / "01_设定集" / sub_dir
         target_dir.mkdir(parents=True, exist_ok=True)
         for j in range(100):
             eid = f"{id_prefix}_{j:03d}"
@@ -1451,7 +1451,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
             "current_goals": ["探索太虚神殿核心区域"],
             "profile_ext": {"realm": "渡劫初期", "techniques": ["长青剑诀"]},
         }
-    _write_yaml(book_dir / "03_state" / "active" / "characters.yaml", active_chars)
+    _write_yaml(book_dir / "03_状态" / "当前" / "人物状态.yaml", active_chars)
 
     archive_chars: dict[str, Any] = {}
     for j in range(30, 100):
@@ -1461,10 +1461,10 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
             "physical_mental": "已退场",
             "current_goals": [],
         }
-    _write_yaml(book_dir / "03_state" / "archive" / "characters.yaml", archive_chars)
+    _write_yaml(book_dir / "03_状态" / "归档" / "人物状态.yaml", archive_chars)
 
     _write_yaml(
-        book_dir / "03_state" / "active" / "factions.yaml",
+        book_dir / "03_状态" / "当前" / "势力状态.yaml",
         {
             "fac_bench_000": {
                 "updated_at_ch": 1000,
@@ -1476,7 +1476,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
         },
     )
     _write_yaml(
-        book_dir / "03_state" / "relations.yaml",
+        book_dir / "03_状态" / "人物关系.yaml",
         {
             "relations": [
                 {
@@ -1497,7 +1497,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
         },
     )
     _write_yaml(
-        book_dir / "03_state" / "threads.yaml",
+        book_dir / "03_状态" / "伏笔台账.yaml",
         {
             "threads": [
                 {
@@ -1517,7 +1517,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
     )
 
     _write_md(
-        book_dir / "02_structure" / "volumes" / "vol_10.md",
+        book_dir / "02_结构" / "分卷" / "第10卷.md",
         {
             "id": "vol_10",
             "title": "第十卷 飞升问鼎",
@@ -1527,12 +1527,12 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
         "第十卷纲要。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "arcs" / "vol_10_arc_01.md",
+        book_dir / "02_结构" / "单元" / "第10卷_第01单元.md",
         {"id": "vol_10_arc_01", "volume_id": "vol_10", "title": "神殿登阶", "chapter_range": [950, 1020]},
         "当前核心单元。\n",
     )
     _write_md(
-        book_dir / "02_structure" / "blueprints" / "vol_10" / "ch_1001.md",
+        book_dir / "02_结构" / "章节蓝图" / "第10卷" / "第1001章.md",
         {
             "chapter": 1001,
             "volume_id": "vol_10",
@@ -1562,7 +1562,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
 
     for vol_idx in range(1, 11):
         vol_id = f"vol_{vol_idx:02d}"
-        ms_dir = book_dir / "04_creation" / "manuscript" / vol_id
+        ms_dir = book_dir / "04_创作" / "定稿" / f"第{vol_idx:02d}卷"
         ms_dir.mkdir(parents=True, exist_ok=True)
         fact_lines: list[str] = []
 
@@ -1575,7 +1575,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
                 f"{chapter_body_template}\n"
             )
             total_chars += len(text)
-            (ms_dir / f"{format_chapter(ch)}.md").write_text(text, encoding="utf-8")
+            (ms_dir / f"第{ch:04d}章.md").write_text(text, encoding="utf-8")
 
             fact_obj = {
                 "ch": ch,
@@ -1592,7 +1592,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
             }
             fact_lines.append(json.dumps(fact_obj, ensure_ascii=False))
 
-        (book_dir / "03_state" / "history" / f"{vol_id}_facts.jsonl").write_text(
+        (book_dir / "03_状态" / "历史" / f"第{vol_idx:02d}卷_事实.jsonl").write_text(
             "\n".join(fact_lines) + "\n", encoding="utf-8"
         )
 
@@ -1612,7 +1612,7 @@ def test_e2e_thousand_chapter_nfr_performance_sla(tmp_path: Path) -> None:
 
         # SLA 2: 单文件改动增量热同步 < 200 ms
         time.sleep(0.08)
-        ch1000_rel = "04_creation/manuscript/vol_10/ch_1000.md"
+        ch1000_rel = "04_创作/定稿/第10卷/第1000章.md"
         ch1000_path = book_dir / ch1000_rel
         ch1000_path.write_text(
             ch1000_path.read_text(encoding="utf-8")

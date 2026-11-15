@@ -317,7 +317,7 @@ def test_mcp_draft_promote_state_search_and_lifecycle(tmp_path: Path) -> None:
             )
         )
         assert draft_res["ok"] is True
-        assert draft_res["draft_path"] == "04_creation/drafts/ch_0001_draft.md"
+        assert draft_res["draft_path"] == "04_创作/草稿/第0001章_草稿.md"
         assert draft_res["char_count"] > 10
 
         # 2. novel_audit_consistency: 对第 1 章执行静态一致性体检
@@ -341,7 +341,7 @@ def test_mcp_draft_promote_state_search_and_lifecycle(tmp_path: Path) -> None:
             )
         )
         assert promote_res["ok"] is True
-        assert promote_res["manuscript_path"] == "04_creation/manuscript/vol_01/ch_0001.md"
+        assert promote_res["manuscript_path"] == "04_创作/定稿/第01卷/第0001章-寒夜古镜.md"
         assert (book_dir / promote_res["manuscript_path"]).is_file()
 
         # 4. novel_record_chapter_outcome: 沉淀第 1 章摘要、原子事实、角色状态、关系与新伏笔
@@ -395,7 +395,7 @@ def test_mcp_draft_promote_state_search_and_lifecycle(tmp_path: Path) -> None:
         )
         assert outcome_res["ok"] is True
         assert outcome_res["chapter"] == 1
-        assert "03_state/history/vol_01_facts.jsonl" in outcome_res["updated_files"]
+        assert "03_状态/历史/第01卷_事实.jsonl" in outcome_res["updated_files"]
 
         # 5. novel_sync_index & novel_search & novel_inspect_entity
         sync_res = _extract_payload(
@@ -569,3 +569,155 @@ def test_mcp_error_handling_graceful_responses(tmp_path: Path) -> None:
         assert err_draft["error_type"] == "ValueError"
 
     asyncio.run(_run_errors())
+
+
+def test_mcp_rename_setting_and_structure_cleans_stale_files(tmp_path: Path) -> None:
+    book_dir = tmp_path / "mcp_rename_book"
+    init_book(
+        book_dir,
+        title="重命名测试",
+        genre_profile="cultivation_rpg",
+        include_samples=True,
+    )
+
+    async def _run() -> None:
+        server = create_server(book_dir=book_dir)
+
+        s1 = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_setting",
+                {
+                    "entity_id": "char_0001",
+                    "name": "林凡",
+                    "category": "character",
+                    "core_text": "初始核心描述。",
+                },
+                run_middleware=False,
+            )
+        )
+        assert s1["ok"] is True
+        old_char = book_dir / "01_设定集" / "人物" / "char_0001-林凡.md"
+        assert old_char.is_file()
+
+        s2 = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_setting",
+                {
+                    "entity_id": "char_0001",
+                    "name": "林玄",
+                    "category": "character",
+                    "core_text": "改名后核心描述。",
+                },
+                run_middleware=False,
+            )
+        )
+        assert s2["ok"] is True
+        new_char = book_dir / "01_设定集" / "人物" / "char_0001-林玄.md"
+        assert new_char.is_file()
+        assert not old_char.exists()
+
+        vol_res = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_volume",
+                {
+                    "volume_id": "vol_01",
+                    "title": "第一卷：潜龙出渊",
+                    "chapter_range": [1, 50],
+                    "core_conflict": "立足外门",
+                    "body": "卷一正文",
+                },
+                run_middleware=False,
+            )
+        )
+        assert vol_res["ok"] is True
+        assert (book_dir / "02_结构" / "分卷" / "第01卷-潜龙出渊.md").is_file()
+        assert not (book_dir / "02_结构" / "分卷" / "第01卷-微末起青萍.md").exists()
+
+        bp_res = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_blueprint",
+                {
+                    "chapter": 1,
+                    "volume_id": "vol_01",
+                    "arc_id": "vol_01_arc_01",
+                    "title": "古令初鸣",
+                    "pov": "char_0001",
+                    "characters": ["char_0001"],
+                    "beats": [{"index": 1, "title": "试剑", "content": "林玄试剑。"}],
+                },
+                run_middleware=False,
+            )
+        )
+        assert bp_res["ok"] is True
+        assert (book_dir / "02_结构" / "章节蓝图" / "第01卷" / "第0001章-古令初鸣.md").is_file()
+        old_bp = (
+            book_dir / "02_结构" / "章节蓝图" / "第01卷" / "第0001章-寒溪采露与铁牌生温.md"
+        )
+        assert not old_bp.exists()
+
+        pkt_build = _extract_payload(
+            await server.call_tool(
+                "novel_build_packet",
+                {"chapter": 1, "budget": 9000},
+                run_middleware=False,
+            )
+        )
+        assert pkt_build["ok"] is True
+
+        pkt_read = _extract_payload(
+            await server.call_tool(
+                "novel_read_packet",
+                {"chapter": 1},
+                run_middleware=False,
+            )
+        )
+        assert pkt_read["ok"] is True
+        assert "改名后核心描述" in pkt_read["content"]
+        assert "古令初鸣" in pkt_read["content"]
+
+    asyncio.run(_run())
+
+
+def test_mcp_upsert_setting_returns_abstraction_warnings(tmp_path: Path) -> None:
+    book_dir = tmp_path / "mcp_abstraction_book"
+    init_book(book_dir, title="设定抽象体检测试", include_samples=True)
+
+    async def _run() -> None:
+        server = create_server(book_dir=book_dir)
+
+        clean_res = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_setting",
+                {
+                    "entity_id": "char_0002",
+                    "name": "陆离",
+                    "category": "character",
+                    "core_text": "外冷内热的侦探型人格，面对危险优先收集证据并保护同伴。",
+                },
+                run_middleware=False,
+            )
+        )
+        assert clean_res["ok"] is True
+        assert clean_res["abstraction_warnings"] == []
+
+        leaky_res = _extract_payload(
+            await server.call_tool(
+                "novel_upsert_setting",
+                {
+                    "entity_id": "char_0003",
+                    "name": "苏玥",
+                    "category": "character",
+                    "core_text": (
+                        "常见小动作清单：每次冷场必定抚摸银镯。\n"
+                        "口头禅：“哼，真是个笨蛋，这种事都要我提醒吗！”"
+                    ),
+                },
+                run_middleware=False,
+            )
+        )
+        assert leaky_res["ok"] is True
+        assert len(leaky_res["abstraction_warnings"]) >= 1
+        assert "abstraction" not in leaky_res["summary"].lower() or "泄露风险" in leaky_res["summary"]
+        assert "泄露风险" in leaky_res["summary"]
+
+    asyncio.run(_run())

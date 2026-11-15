@@ -17,6 +17,7 @@ from typing import Any, Final
 
 import yaml
 
+from ddnovel.core.paths import extract_clean_title
 from ddnovel.core.schemas._base import (
     ARC_ID_PATTERN,
     ENTITY_ID_PATTERN,
@@ -177,6 +178,7 @@ CATEGORY_SYNONYMS: Final[dict[str, SettingCategory]] = {
     "artifact": SettingCategory.ITEM,
     "artifacts": SettingCategory.ITEM,
     "物品": SettingCategory.ITEM,
+    "器物": SettingCategory.ITEM,
     "道具": SettingCategory.ITEM,
     "法宝": SettingCategory.ITEM,
     "装备": SettingCategory.ITEM,
@@ -286,6 +288,14 @@ RE_TOPIC_HEADING: Final[re.Pattern[str]] = re.compile(
     rf"^#{{1,6}}\s*(?:"
     rf"{BRACKET_OPEN}\s*(?:专题|主题|topic)(?:设定|信息|档案|资料)?\s*(?:[:：\-—\s]\s*(.+?)|)\s*{BRACKET_CLOSE}\s*(?:[:：\-—\s]\s*)?(.*)|"
     rf"(?:专题|主题|topic)(?:设定|信息|档案|资料)?(?:\s*[:：\-—\s]\s*(.+?)|\s*)$"
+    rf")\s*$",
+    re.IGNORECASE,
+)
+RE_AUTHOR_NOTE_HEADING: Final[re.Pattern[str]] = re.compile(
+    rf"^#{{1,6}}\s*(?:"
+    rf"{BRACKET_OPEN}\s*(?:作者(?:备忘|手记|笔记|注|随笔|私密|设定)?|备忘|备注|灵感(?:随笔|碎片)?|随笔|草稿|台词样本|对话样本|示例对话|示例台词|场景构想|桥段构想|author(?:\s*notes?)?|notes?|memo|drafts?)"
+    rf"(?:\s*[:：\-—\s].*?)?\s*{BRACKET_CLOSE}\s*(?:[:：\-—\s].*)?$|"
+    rf"(?:作者备忘|作者手记|作者注|台词样本|示例对话|示例台词|构思期样本|场景构想|桥段构想)(?:[:：\-—\s].*|\s*$)"
     rf")\s*$",
     re.IGNORECASE,
 )
@@ -455,14 +465,71 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(total))
 
 
+_HTML_INLINE_COMMENT_RE: Final[re.Pattern[str]] = re.compile(r"<!--.*?-->")
+_FENCE_LINE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*(`{3,}|~{3,})")
+
+
+def _strip_html_comments_outside_fences(body: str) -> str:
+    """在保留代码围栏原貌的前提下，剥离代码块外部的 HTML 注释 ``<!-- ... -->``。"""
+    if "<!--" not in body:
+        return body
+
+    out_lines: list[str] = []
+    in_code_fence: tuple[str, int] | None = None
+    in_html_comment = False
+
+    for raw_line in body.splitlines():
+        m_fence = _FENCE_LINE_RE.match(raw_line)
+        if in_code_fence is not None:
+            f_char, f_len = in_code_fence
+            if m_fence and m_fence.group(1)[0] == f_char and len(m_fence.group(1)) >= f_len:
+                in_code_fence = None
+            out_lines.append(raw_line)
+            continue
+
+        if not in_html_comment and m_fence:
+            in_code_fence = (m_fence.group(1)[0], len(m_fence.group(1)))
+            out_lines.append(raw_line)
+            continue
+
+        line = raw_line
+        while True:
+            if in_html_comment:
+                end_idx = line.find("-->")
+                if end_idx == -1:
+                    line = ""
+                    break
+                line = line[end_idx + 3 :]
+                in_html_comment = False
+                continue
+
+            line = _HTML_INLINE_COMMENT_RE.sub("", line)
+            start_idx = line.find("<!--")
+            if start_idx != -1:
+                line = line[:start_idx]
+                in_html_comment = True
+            break
+
+        if in_html_comment and not line.strip():
+            continue
+        if raw_line.strip() and not line.strip() and "<!--" in raw_line:
+            continue
+        out_lines.append(line)
+
+    return "\n".join(out_lines)
+
+
 def split_progressive_blocks(markdown: str) -> ParsedBlocks:
     """将设定文档 Markdown 正文切分为核心、专题、机密三级渐进切片，并估算 Token。
 
-    - 核心切片：`## [核心]` 标题下的内容，或未声明特殊标题时的默认全文/首部正文。
-    - 专题切片：`## [专题: X]` 或 `## 【专题：X】` 标题下的按需挂载内容。
-    - 机密切片：`## [机密]` 标题下的绝密底牌，默认严格物理隔离。
+    - 核心切片：``## [核心]`` 标题下的内容，或未声明特殊标题时的默认全文/首部正文。
+    - 专题切片：``## [专题: X]`` 或 ``## 【专题：X】`` 标题下的按需挂载内容。
+    - 机密切片：``## [机密]`` 标题下的绝密底牌，默认严格物理隔离。
+    - 作者备忘：``## [作者备忘]`` / ``## [灵感]`` / ``## [台词样本]`` 及 ``<!-- ... -->``
+      HTML 注释在解析期自动剥离，绝不进入模型设定切片。
     """
-    _, body = split_frontmatter(markdown)
+    _, raw_body = split_frontmatter(markdown)
+    body = _strip_html_comments_outside_fences(raw_body)
 
     prelude_lines: list[str] = []
     core_lines: list[str] = []
@@ -472,11 +539,10 @@ def split_progressive_blocks(markdown: str) -> ParsedBlocks:
     current_section = "prelude"
     current_topic: str | None = None
     in_code_fence: tuple[str, int] | None = None
-    fence_re = re.compile(r"^\s*(`{3,}|~{3,})")
 
     for line in body.splitlines():
         # 代码块栅栏追踪：处于代码块内时，绝不误触切片标题切分
-        m_fence = fence_re.match(line)
+        m_fence = _FENCE_LINE_RE.match(line)
         if in_code_fence is not None:
             f_char, f_len = in_code_fence
             if m_fence and m_fence.group(1)[0] == f_char and len(m_fence.group(1)) >= f_len:
@@ -501,6 +567,11 @@ def split_progressive_blocks(markdown: str) -> ParsedBlocks:
                 topics_map[current_topic].append(line)
             elif current_section == "secret":
                 secret_lines.append(line)
+            continue
+
+        if RE_AUTHOR_NOTE_HEADING.match(line):
+            current_section = "author_note"
+            current_topic = None
             continue
 
         m_topic = RE_TOPIC_HEADING.match(line)
@@ -531,7 +602,9 @@ def split_progressive_blocks(markdown: str) -> ParsedBlocks:
                 core_lines.append("")
             continue
 
-        if current_section == "prelude":
+        if current_section == "author_note":
+            continue
+        elif current_section == "prelude":
             prelude_lines.append(line)
         elif current_section == "core":
             core_lines.append(line)
@@ -601,6 +674,16 @@ def _normalize_entity_id(
     stem_cand = fallback_stem.strip().lower()
     if re.match(ENTITY_ID_PATTERN, stem_cand):
         return stem_cand
+
+    m_pref_stem = re.match(r"^([a-z][a-z0-9]*_[a-z0-9_]+)-", stem_cand)
+    if m_pref_stem and re.match(ENTITY_ID_PATTERN, m_pref_stem.group(1)):
+        return m_pref_stem.group(1)
+
+    m_dash_stem = re.match(r"^([a-z][a-z0-9]*)-(\d+)-", stem_cand)
+    if m_dash_stem:
+        cand_dash = f"{m_dash_stem.group(1)}_{m_dash_stem.group(2)}"
+        if re.match(ENTITY_ID_PATTERN, cand_dash):
+            return cand_dash
 
     clean_stem = re.sub(r"[^a-z0-9_]+", "_", stem_cand).strip("_")
     if clean_stem:
@@ -682,6 +765,18 @@ def _infer_name(
         return candidate
 
     stem = path.stem.strip()
+    m_id_label = re.match(r"^[a-z][a-z0-9]*_[a-z0-9_]+-(.+)$", stem, re.IGNORECASE)
+    if m_id_label:
+        label = m_id_label.group(1).strip()
+        if label:
+            return label
+
+    m_dash_label = re.match(r"^[a-z][a-z0-9]*-[a-z0-9]+-(.+)$", stem, re.IGNORECASE)
+    if m_dash_label:
+        label = m_dash_label.group(1).strip()
+        if label:
+            return label
+
     prefix = CATEGORY_PREFIX_MAP.get(category, "")
     if prefix and stem.lower().startswith(prefix) and len(stem) > len(prefix):
         clean_name = stem[len(prefix) :].strip()
@@ -703,7 +798,16 @@ def _normalize_file_path(path: Path, book_dir: Path | None) -> str:
             pass
 
     parts = list(path.parts)
-    for root_marker in ("01_settings", "02_structure", "03_state", "04_creation"):
+    for root_marker in (
+        "01_设定集",
+        "02_结构",
+        "03_状态",
+        "04_创作",
+        "01_settings",
+        "02_structure",
+        "03_state",
+        "04_creation",
+    ):
         if root_marker in parts:
             idx = parts.index(root_marker)
             return Path(*parts[idx:]).as_posix()
@@ -1097,25 +1201,35 @@ class ProgressiveParser:
             if m and int(m.group(1)) >= 1:
                 chapter = int(m.group(1))
             else:
-                m_stem_cn = re.search(r"第\s*([一二三四五六七八九十百千]+)\s*[章回节]", target_path.stem)
-                if m_stem_cn:
-                    cn_s = parse_chinese_num(m_stem_cn.group(1))
-                    chapter = cn_s if cn_s and cn_s >= 1 else 1
+                m_zh_digit = re.search(r"第\s*(\d+)\s*[章回节]", target_path.stem)
+                if m_zh_digit and int(m_zh_digit.group(1)) >= 1:
+                    chapter = int(m_zh_digit.group(1))
                 else:
-                    m2 = re.search(r"\d+", target_path.stem)
-                    if m2 and int(m2.group()) >= 1:
-                        chapter = int(m2.group())
+                    m_stem_cn = re.search(
+                        r"第\s*([一二三四五六七八九十百千]+)\s*[章回节]",
+                        target_path.stem,
+                    )
+                    if m_stem_cn:
+                        cn_s = parse_chinese_num(m_stem_cn.group(1))
+                        chapter = cn_s if cn_s and cn_s >= 1 else 1
                     else:
-                        m3 = re.search(r"第\s*(\d+|[一二三四五六七八九十百千]+)\s*[章回节]", body)
-                        if m3:
-                            c_val = m3.group(1)
-                            if c_val.isdigit() and int(c_val) >= 1:
-                                chapter = int(c_val)
-                            else:
-                                cn_ch = parse_chinese_num(c_val)
-                                chapter = cn_ch if (cn_ch and cn_ch >= 1) else 1
+                        m2 = re.search(r"\d+", target_path.stem)
+                        if m2 and int(m2.group()) >= 1:
+                            chapter = int(m2.group())
                         else:
-                            chapter = 1
+                            m3 = re.search(
+                                r"第\s*(\d+|[一二三四五六七八九十百千]+)\s*[章回节]",
+                                body,
+                            )
+                            if m3:
+                                c_val = m3.group(1)
+                                if c_val.isdigit() and int(c_val) >= 1:
+                                    chapter = int(c_val)
+                                else:
+                                    cn_ch = parse_chinese_num(c_val)
+                                    chapter = cn_ch if (cn_ch and cn_ch >= 1) else 1
+                            else:
+                                chapter = 1
 
         # 2. 分卷与单元 ID
         raw_vol = fm_dict.get("volume_id") or fm_dict.get("volume") or fm_dict.get("vol")
@@ -1152,6 +1266,10 @@ class ProgressiveParser:
                     if cn_p and cn_p >= 1:
                         volume_id = f"vol_{cn_p:02d}"
                         break
+                m_zh_num_vol = re.search(r"第\s*(\d+)\s*卷", part)
+                if m_zh_num_vol and int(m_zh_num_vol.group(1)) >= 1:
+                    volume_id = f"vol_{int(m_zh_num_vol.group(1)):02d}"
+                    break
                 m_vol_part = re.search(r"(?:vol|volume)_?(\d+)", part, re.IGNORECASE)
                 if m_vol_part and int(m_vol_part.group(1)) >= 1:
                     volume_id = f"vol_{int(m_vol_part.group(1)):02d}"
@@ -1184,6 +1302,10 @@ class ProgressiveParser:
                 if re.match(ARC_ID_PATTERN, part):
                     arc_id = part
                     break
+                m_zh_arc = re.search(r"第\s*(\d+)\s*卷_第\s*(\d+)\s*单元", part)
+                if m_zh_arc and int(m_zh_arc.group(1)) >= 1 and int(m_zh_arc.group(2)) >= 1:
+                    arc_id = f"vol_{int(m_zh_arc.group(1)):02d}_arc_{int(m_zh_arc.group(2)):02d}"
+                    break
 
         # 3. 标题与 POV（去除前缀章号及破折号、副标题前缀）
         raw_title = fm_dict.get("title")
@@ -1200,7 +1322,8 @@ class ProgressiveParser:
                 t_cand = re.sub(r"^[:：\-—\s]+", "", t_cand).strip()
                 title = t_cand if t_cand else None
             else:
-                title = None
+                stem_title = extract_clean_title(target_path.stem, "chapter")
+                title = stem_title or None
 
         raw_pov = fm_dict.get("pov")
         pov: str | None = None
@@ -1888,6 +2011,105 @@ class ProgressiveParser:
 _default_parser = ProgressiveParser()
 
 
+_LINT_DIALOGUE_LABEL_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:台词样本|对话样本|独白样本|示例对话|示例台词|台词例句|经典台词|代表台词|构思期样本)"
+)
+_LINT_QUOTED_CN_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:“([^”\n]{8,})”|「([^」\n]{8,})」)"
+)
+_LINT_QUOTED_ASCII_RE: Final[re.Pattern[str]] = re.compile(r'"([^"\n]{12,})"')
+_LINT_SPOKEN_PUNCT_RE: Final[re.Pattern[str]] = re.compile(r"[！？…]|……")
+_LINT_SPOKEN_PARTICLE_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:^|[，、\s])(?:我|你|您|咱们|唔|诶|呀|呢|吧|嘛|啦|哦|哼)|(?:唔|诶|呀|呢|吧|嘛|啦|哦)(?:[，。！？…]|$)"
+)
+_LINT_SCENE_EXAMPLE_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:(?:例如|比如|譬如)[^。\n]{4,160}(?:结果|反被|最后只能|偷偷用|一把按住|笑眯眯|捞上膝头|面红耳赤)|"
+    r"(?:初登场建议|建议三拍|名场面构想|名场面|小剧场|互动样本|场景示例|基地趣事|日常趣事|过招样本)|"
+    r"(?:曾有一次|有一次(?:她|他|它)?曾?)[^。\n]{6,120})"
+)
+_LINT_PRESET_ACTION_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:固定动作习惯|常见小动作清单|小动作清单|动作清单|必演动作|预设动作|作者指定|标志坐姿|标志动作|惯用亲昵方式|标志性动作习惯|声音与动作习惯)"
+)
+_LINT_CJK_CHAR_RE: Final[re.Pattern[str]] = re.compile(r"[\u4e00-\u9fff]")
+_CORE_OVERWEIGHT_TOKEN_LIMIT: Final[int] = 650
+
+
+def _is_spoken_dialogue_quote(quote_text: str) -> bool:
+    """判定引号内文本是否属于具体角色对白/台词样本（而非专有名词短语）。"""
+    if _LINT_SPOKEN_PUNCT_RE.search(quote_text):
+        return True
+    if "，" in quote_text and _LINT_SPOKEN_PARTICLE_RE.search(quote_text):
+        return True
+    return False
+
+
+def lint_model_setting_doc(doc: SettingDoc) -> list[str]:
+    """静态检查面向模型的 ``01_设定集/`` 设定卡是否混入作者层具象内容。
+
+    扫描 ``core_text``、``topics`` 以及结构规划师可见的 ``secret_text``（``## [机密]``），
+    检出以下 4 类具象污染并返回去重告警列表：
+    1. 示例对话 / 台词 / 独白样本泄露；
+    2. 具体场景 / 名场面 / 一次性互动桥段举例泄露；
+    3. 预设分镜动作 / 打卡清单词汇泄露；
+    4. ``[核心]`` 速写估算 Token 超过合理阈值（650 Tokens）。
+    """
+    warnings: list[str] = []
+    sections: list[tuple[str, str]] = [("[核心]", doc.core_text)]
+    sections.extend((f"[专题: {t_name}]", t_body) for t_name, t_body in doc.topics.items())
+    if doc.secret_text and doc.secret_text.strip():
+        sections.append(("[机密]", doc.secret_text))
+
+    for sec_label, sec_text in sections:
+        if not sec_text or not sec_text.strip():
+            continue
+
+        m_label = _LINT_DIALOGUE_LABEL_RE.search(sec_text)
+        if m_label:
+            warnings.append(
+                f"{sec_label} 包含台词/对话样本标记 `{m_label.group(0)}`，"
+                "请将具体台词样本移入 `00_作者设定/`，模型卡仅保留抽象语调特征。"
+            )
+
+        for pattern in (_LINT_QUOTED_CN_RE, _LINT_QUOTED_ASCII_RE):
+            for match in pattern.finditer(sec_text):
+                inner = next((g for g in match.groups() if g is not None), "").strip()
+                if pattern is _LINT_QUOTED_ASCII_RE and not _LINT_CJK_CHAR_RE.search(inner):
+                    continue
+                if _is_spoken_dialogue_quote(inner):
+                    excerpt = inner if len(inner) <= 22 else f"{inner[:20]}…"
+                    warnings.append(
+                        f"{sec_label} 疑似包含具体角色对白“{excerpt}”，"
+                        "请将示例台词移入 `00_作者设定/`，避免执笔模型直接照搬。"
+                    )
+                    break
+
+        m_scene = _LINT_SCENE_EXAMPLE_RE.search(sec_text)
+        if m_scene:
+            excerpt = m_scene.group(0).strip()
+            if len(excerpt) > 28:
+                excerpt = f"{excerpt[:26]}…"
+            warnings.append(
+                f"{sec_label} 疑似包含具体场景/桥段举例（`{excerpt}`），"
+                "请移入 `00_作者设定/`，模型卡仅留抽象性格机制与关系边界。"
+            )
+
+        m_action = _LINT_PRESET_ACTION_RE.search(sec_text)
+        if m_action:
+            warnings.append(
+                f"{sec_label} 包含预设动作/打卡指示词 `{m_action.group(0)}`，"
+                "易诱发模型每章机械套用动作，建议移入 `00_作者设定/` 并改写为抽象气质描述。"
+            )
+
+    core_tokens = estimate_tokens(doc.core_text)
+    if core_tokens > _CORE_OVERWEIGHT_TOKEN_LIMIT:
+        warnings.append(
+            f"[核心] 区块估算约 {core_tokens} Tokens（建议 <= {_CORE_OVERWEIGHT_TOKEN_LIMIT}），"
+            "建议精简为客观本底与核心机制，次要细节拆入 `[专题]` 或移回 `00_作者设定/`。"
+        )
+
+    return list(dict.fromkeys(warnings))
+
+
 def parse_setting_md(
     path: Path | str,
     *,
@@ -1911,6 +2133,7 @@ def parse_blueprint_md(
 __all__ = [
     "ProgressiveParser",
     "estimate_tokens",
+    "lint_model_setting_doc",
     "parse_blueprint_md",
     "parse_setting_md",
     "split_frontmatter",

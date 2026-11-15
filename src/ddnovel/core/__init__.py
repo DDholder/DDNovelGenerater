@@ -11,6 +11,7 @@ from .packet_builder import PacketBuilder, build_packet
 from .parser import (
     ProgressiveParser,
     estimate_tokens,
+    lint_model_setting_doc,
     parse_blueprint_md,
     parse_setting_md,
     split_frontmatter,
@@ -48,6 +49,7 @@ __all__ = [
     "build_packet",
     "cosine_similarity",
     "estimate_tokens",
+    "lint_model_setting_doc",
     "pack_f32",
     "parse_blueprint_md",
     "parse_setting_md",

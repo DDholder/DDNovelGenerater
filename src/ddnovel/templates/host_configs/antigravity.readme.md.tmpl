@@ -1,0 +1,20 @@
+# DDNovelGenerater Antigravity Plugin
+
+为 Google Antigravity 提供 **DDNovelGenerater** 长篇小说创作工程底座的原生集成包（支持全局“一引擎驱动多本书”与单书工作区自包含两种模式）。
+
+## 包含组件
+
+- **MCP Server (`ddnovel`)**：暴露设定维护、五维防吃书扫描、伏笔雷达、U 型单章写作包编译、一致性体检、定稿入库与状态结算等全部工具。
+- **四角色渐进式 Skills**：
+  - `dd-setting-architect`（设定师）
+  - `dd-structure-planner`（结构规划师）
+  - `dd-chapter-writer`（单包独立执笔人）
+  - `dd-state-curator`（场记与审校员）
+- **空白上下文独立执笔 Subagent (`agents/dd-chapter-writer.md`)**：物理剥离命令行与全库检索工具，仅读取单章写作包撰写初稿，彻底杜绝剧透。
+- **编排规则 (`rules/AGENTS.md`)**：约束文账分离边界、书库路径路由及 Step 4 强制子代理隔离。
+
+## 常用 CLI 命令
+
+- 全局安装本机插件：`ddnovel host install antigravity`
+- 为单本书初始化工作区宿主配置：`ddnovel init <书库目录> -H antigravity`
+- 为已有书库增量同步宿主配置：`ddnovel host sync -d <书库目录> -H antigravity`

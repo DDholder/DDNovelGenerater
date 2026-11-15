@@ -10,6 +10,19 @@ uv run ddnovel version
 uv run pytest
 ```
 
+### Antigravity 集成
+
+- **全局安装插件（一引擎驱动多本书，推荐）**：
+  ```bash
+  uv run ddnovel host install antigravity
+  ```
+- **单书工作区自包含配置（随书库 Git 共享）**：
+  ```bash
+  uv run ddnovel init <book_dir> -H antigravity
+  # 或为已有书库增量同步
+  uv run ddnovel host sync -d <book_dir> -H antigravity
+  ```
+
 可选向量检索插件：`uv sync --extra vector`
 
 ## 文档

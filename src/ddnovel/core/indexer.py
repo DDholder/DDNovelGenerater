@@ -30,6 +30,24 @@ import yaml
 
 from .alias_matcher import AliasMatcher
 from .parser import ProgressiveParser
+from .paths import (
+    is_archive_path,
+    is_author_notes_path,
+    is_blueprint_path,
+    is_characters_state_filename,
+    is_factions_state_filename,
+    is_facts_filename,
+    is_relations_filename,
+    is_setting_root_part,
+    is_state_root_part,
+    is_threads_filename,
+    resolve_config_path,
+    resolve_history_dir,
+    resolve_manuscript_dir,
+    resolve_settings_root,
+    resolve_state_root,
+    resolve_structure_root,
+)
 from .schemas import (
     ChapterFactRecord,
     ChapterWindow,
@@ -57,7 +75,10 @@ _CJK_RE: Final[re.Pattern[str]] = re.compile(r"[\u4e00-\u9fff]+")
 _WORD_RE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_]+")
 _PUNCTUATION_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[\s\W_]+$")
 _RESERVED_OPERATORS: Final[frozenset[str]] = frozenset({"AND", "OR", "NOT", "NEAR"})
-_CHAPTER_RE: Final[re.Pattern[str]] = re.compile(r"ch_?(\d+)", re.IGNORECASE)
+_CHAPTER_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:ch_?(\d+)|第\s*(\d+)\s*[章回节])",
+    re.IGNORECASE,
+)
 _CHAPTER_TITLE_RE: Final[re.Pattern[str]] = re.compile(r"第\s*(\d+)\s*章")
 
 # SQLite DDLs for all 8 relational tables + 1 virtual table + 3 triggers
@@ -311,13 +332,13 @@ class SqliteIndexer:
         if config is not None:
             self._config = config
         else:
-            cfg_file = self._book_dir / "novel.yaml"
+            cfg_file = resolve_config_path(self._book_dir)
             if cfg_file.is_file():
                 self._config = NovelConfig.model_validate(
                     yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
                 )
             else:
-                self._config = NovelConfig()
+                self._config = NovelConfig(title=self._book_dir.name or "未命名小说")
 
         self._parser = parser if parser is not None else ProgressiveParser(book_dir=self._book_dir)
 
@@ -555,28 +576,28 @@ class SqliteIndexer:
         results: dict[str, tuple[str, int, int]] = {}
         book_dir = self._book_dir
 
-        # 1. 01_settings/
-        settings_dir = book_dir / "01_settings"
+        # 1. 01_设定集/ (兼容 01_settings/)
+        settings_dir = resolve_settings_root(book_dir)
         if settings_dir.is_dir():
             for p, st in self._scandir_recursive(settings_dir, extensions=(".md",)):
                 rel = p.relative_to(book_dir).as_posix()
                 results[rel] = ("setting", st.st_mtime_ns, st.st_size)
 
-        # 2. 02_structure/
-        structure_dir = book_dir / "02_structure"
+        # 2. 02_结构/ (兼容 02_structure/)
+        structure_dir = resolve_structure_root(book_dir)
         if structure_dir.is_dir():
             for p, st in self._scandir_recursive(structure_dir, extensions=(".md",)):
                 rel = p.relative_to(book_dir).as_posix()
-                cat = "blueprint" if "blueprints" in p.relative_to(structure_dir).parts else "structure"
+                cat = "blueprint" if is_blueprint_path(p.relative_to(structure_dir)) else "structure"
                 results[rel] = (cat, st.st_mtime_ns, st.st_size)
 
-        # 3. 03_state/
-        state_dir = book_dir / "03_state"
+        # 3. 03_状态/ (兼容 03_state/)
+        state_dir = resolve_state_root(book_dir)
         if state_dir.is_dir():
             for p, st in self._scandir_recursive(state_dir, extensions=(".yaml", ".yml")):
                 rel = p.relative_to(book_dir).as_posix()
                 results[rel] = ("state", st.st_mtime_ns, st.st_size)
-            history_dir = state_dir / "history"
+            history_dir = resolve_history_dir(book_dir)
             if history_dir.is_dir():
                 try:
                     with os.scandir(history_dir) as it:
@@ -584,13 +605,13 @@ class SqliteIndexer:
                 except OSError:
                     h_entries = []
                 for entry in h_entries:
-                    if entry.is_file() and entry.name.endswith("_facts.jsonl"):
+                    if entry.is_file() and is_facts_filename(entry.name):
                         st = entry.stat()
                         rel = Path(entry.path).relative_to(book_dir).as_posix()
                         results[rel] = ("fact", st.st_mtime_ns, st.st_size)
 
-        # 4. 04_creation/manuscript/
-        manuscript_dir = book_dir / "04_creation" / "manuscript"
+        # 4. 04_创作/定稿/ (兼容 04_creation/manuscript/)
+        manuscript_dir = resolve_manuscript_dir(book_dir)
         if manuscript_dir.is_dir():
             for p, st in self._scandir_recursive(manuscript_dir, extensions=(".md",)):
                 rel = p.relative_to(book_dir).as_posix()
@@ -607,7 +628,7 @@ class SqliteIndexer:
         conn = self._ensure_connected()
         posix_path = Path(rel_path).as_posix()
         is_state_yaml = (
-            "03_state" in Path(rel_path).parts
+            any(is_state_root_part(part) for part in Path(rel_path).parts)
             and posix_path.endswith((".yaml", ".yml"))
         )
         if is_state_yaml:
@@ -647,7 +668,7 @@ class SqliteIndexer:
             )
 
         is_setting = (
-            "01_settings" in Path(rel_path).parts
+            any(is_setting_root_part(part) for part in Path(rel_path).parts)
             and posix_path.endswith((".md", ".markdown"))
         )
         if is_setting:
@@ -673,7 +694,10 @@ class SqliteIndexer:
                     core_text = '',
                     secret_text = NULL,
                     tags_json = '[]',
-                    is_archived = CASE WHEN state_file LIKE '%archive%' THEN 1 ELSE 0 END
+                    is_archived = CASE
+                        WHEN (state_file LIKE '%archive%' OR state_file LIKE '%归档%') THEN 1
+                        ELSE 0
+                    END
                 WHERE file_path = ? AND state_file IS NOT NULL AND state_file != ''
                 """,
                 (rel_path,),
@@ -694,7 +718,9 @@ class SqliteIndexer:
         conn.execute("DELETE FROM fts_docs WHERE source_file = ?", (rel_path,))
 
     def _ingest_file(self, rel_path: str, category: str) -> None:
-        """按文件类型路由分派解析与落库。"""
+        """按文件类型路由分派解析与落库（物理隔离 00_作者设定/ 上层自由区）。"""
+        if is_author_notes_path(rel_path):
+            return
         if category == "setting":
             self._ingest_setting(rel_path)
         elif category == "blueprint":
@@ -731,7 +757,7 @@ class SqliteIndexer:
                 tags_json = excluded.tags_json,
                 is_archived = CASE
                     WHEN excluded.is_archived = 1 THEN 1
-                    WHEN entities.state_file LIKE '%archive%' THEN 1
+                    WHEN (entities.state_file LIKE '%archive%' OR entities.state_file LIKE '%归档%') THEN 1
                     ELSE 0
                 END
             """,
@@ -853,10 +879,10 @@ class SqliteIndexer:
         if not data:
             return
 
-        posix_path = Path(rel_path).as_posix()
-        is_archive = "archive" in Path(rel_path).parts
+        file_name = Path(rel_path).name
+        is_archive = is_archive_path(rel_path)
 
-        if posix_path.endswith("relations.yaml"):
+        if is_relations_filename(file_name):
             rel_file = RelationsFile.model_validate(data)
             for r in rel_file.relations:
                 conn.execute(
@@ -868,7 +894,7 @@ class SqliteIndexer:
                     (r.source, r.target, r.relation, r.valid_from_ch, r.invalid_at_ch, rel_path),
                 )
 
-        elif posix_path.endswith("threads.yaml"):
+        elif is_threads_filename(file_name):
             thr_file = ThreadsFile.model_validate(data)
             for t in thr_file.threads:
                 win_start = t.expected_window.start if t.expected_window else None
@@ -897,7 +923,7 @@ class SqliteIndexer:
                     ),
                 )
 
-        elif posix_path.endswith("characters.yaml"):
+        elif is_characters_state_filename(file_name):
             cf = CharacterStateFile.model_validate(data)
             archived_flag = 1 if is_archive else 0
             for eid, c_state in cf.root.items():
@@ -908,7 +934,7 @@ class SqliteIndexer:
                     if (
                         existing is not None
                         and existing[0]
-                        and str(existing[0]).startswith("03_state/active/")
+                        and str(existing[0]).startswith(("03_state/active/", "03_状态/当前/"))
                     ):
                         continue
                 state_json = c_state.model_dump_json()
@@ -925,7 +951,8 @@ class SqliteIndexer:
                         file_path = CASE
                             WHEN entities.file_path = ''
                                 OR entities.file_path IS NULL
-                                OR entities.file_path LIKE '03_state/%' THEN excluded.file_path
+                                OR entities.file_path LIKE '03_state/%'
+                                OR entities.file_path LIKE '03_状态/%' THEN excluded.file_path
                             ELSE entities.file_path
                         END,
                         is_archived = CASE
@@ -947,7 +974,7 @@ class SqliteIndexer:
                     (eid,),
                 )
 
-        elif posix_path.endswith("factions.yaml"):
+        elif is_factions_state_filename(file_name):
             ff = FactionStateFile.model_validate(data)
             for eid, f_state in ff.root.items():
                 if is_archive:
@@ -957,7 +984,7 @@ class SqliteIndexer:
                     if (
                         existing is not None
                         and existing[0]
-                        and str(existing[0]).startswith("03_state/active/")
+                        and str(existing[0]).startswith(("03_state/active/", "03_状态/当前/"))
                     ):
                         continue
                 archived_flag = (
@@ -979,7 +1006,8 @@ class SqliteIndexer:
                         file_path = CASE
                             WHEN entities.file_path = ''
                                 OR entities.file_path IS NULL
-                                OR entities.file_path LIKE '03_state/%' THEN excluded.file_path
+                                OR entities.file_path LIKE '03_state/%'
+                                OR entities.file_path LIKE '03_状态/%' THEN excluded.file_path
                             ELSE entities.file_path
                         END,
                         is_archived = CASE
@@ -1077,7 +1105,7 @@ class SqliteIndexer:
         ch_num = 0
         m_stem = _CHAPTER_RE.search(abs_p.stem)
         if m_stem:
-            ch_num = int(m_stem.group(1))
+            ch_num = int(m_stem.group(1) or m_stem.group(2))
         else:
             m_title = _CHAPTER_TITLE_RE.search(content)
             if m_title:
@@ -1345,7 +1373,7 @@ class SqliteIndexer:
             bundle = self.get_entity_bundle(entity_id)
             if (
                 bundle.setting.file_path.endswith((".yaml", ".yml"))
-                or "03_state" in Path(bundle.setting.file_path).parts
+                or any(is_state_root_part(part) for part in Path(bundle.setting.file_path).parts)
                 or not bundle.setting.file_path
             ):
                 return None

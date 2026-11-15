@@ -2007,7 +2007,8 @@
           "enum": [
             "opencode",
             "dsh",
-            "claude"
+            "claude",
+            "antigravity"
           ],
           "title": "HostKind",
           "type": "string"

@@ -19,8 +19,22 @@ import yaml
 from .alias_matcher import AliasMatcher
 from .indexer import SqliteIndexer
 from .parser import ProgressiveParser
+from .paths import (
+    list_facts_files,
+    resolve_active_characters_file,
+    resolve_active_factions_file,
+    resolve_archive_characters_file,
+    resolve_archive_factions_file,
+    resolve_archive_relations_file,
+    resolve_blueprints_dir,
+    resolve_config_path,
+    resolve_manuscript_dir,
+    resolve_relations_file,
+    resolve_state_root,
+    resolve_threads_file,
+    resolve_world_state_file,
+)
 from .schemas import (
-    NOVEL_CONFIG_FILENAME,
     ChapterFactRecord,
     CharacterStateFile,
     FactionStateFile,
@@ -35,7 +49,10 @@ from .schemas import (
     WorldState,
 )
 
-_CHAPTER_RE: Final[re.Pattern[str]] = re.compile(r"ch_?(\d+)", re.IGNORECASE)
+_CHAPTER_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:ch_?(\d+)|第\s*(\d+)\s*[章回节])",
+    re.IGNORECASE,
+)
 _CHAPTER_TITLE_RE: Final[re.Pattern[str]] = re.compile(r"第\s*(\d+)\s*章")
 _ASCII_ID_CHAR_RE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_]")
 
@@ -97,7 +114,7 @@ def _extract_chapter_num(path: Path, content: str) -> int | None:
     """从文件名或正文标题提取正整章号（无合法章号时返回 None，严禁返回 0）。"""
     m_stem = _CHAPTER_RE.search(path.stem)
     if m_stem:
-        ch = int(m_stem.group(1))
+        ch = int(m_stem.group(1) or m_stem.group(2))
         return ch if ch >= 1 else None
     m_title = _CHAPTER_TITLE_RE.search(content)
     if m_title:
@@ -248,11 +265,11 @@ class ImpactAnalyzer:
         elif indexer is not None:
             self._config = indexer.config
         else:
-            cfg_path = self._book_dir / NOVEL_CONFIG_FILENAME
+            cfg_path = resolve_config_path(self._book_dir)
             if cfg_path.is_file():
                 self._config = NovelConfig.load(self._book_dir)
             else:
-                self._config = NovelConfig(title=self._book_dir.name or "Untitled")
+                self._config = NovelConfig(title=self._book_dir.name or "未命名小说")
 
         self._parser: ProgressiveParser = (
             parser if parser is not None else ProgressiveParser(book_dir=self._book_dir)
@@ -573,7 +590,7 @@ class ImpactAnalyzer:
         if row is not None and row[0]:
             return str(row[0]).strip()
 
-        threads_path = self._book_dir / "03_state" / "threads.yaml"
+        threads_path = resolve_threads_file(self._book_dir)
         data = _load_yaml_data(threads_path)
         if data:
             threads_file = ThreadsFile.model_validate(data)
@@ -589,7 +606,7 @@ class ImpactAnalyzer:
     def _build_cached_manuscript_hits(self, matcher: AliasMatcher) -> dict[str, list[ImpactHit]]:
         """在启用语料缓存时一次性扫描全部已定稿正文并按实体 ID 聚合命中。"""
         hits_by_eid: dict[str, list[ImpactHit]] = {}
-        manuscript_dir = self._book_dir / "04_creation" / "manuscript"
+        manuscript_dir = resolve_manuscript_dir(self._book_dir)
         if not manuscript_dir.is_dir():
             return hits_by_eid
 
@@ -651,7 +668,7 @@ class ImpactAnalyzer:
                 )
             return list(self._cached_manuscript_hits.get(query.match_entity_id, ()))
 
-        manuscript_dir = self._book_dir / "04_creation" / "manuscript"
+        manuscript_dir = resolve_manuscript_dir(self._book_dir)
         if not manuscript_dir.is_dir():
             return []
 
@@ -690,14 +707,14 @@ class ImpactAnalyzer:
         if self._enable_corpus_cache and self._cached_facts is not None:
             return self._cached_facts
 
-        history_dir = self._book_dir / "03_state" / "history"
-        if not history_dir.is_dir():
+        fact_files = list_facts_files(self._book_dir)
+        if not fact_files:
             if self._enable_corpus_cache:
                 self._cached_facts = []
             return []
 
         parsed: list[tuple[str, list[ChapterFactRecord]]] = []
-        for path in sorted(history_dir.glob("*_facts.jsonl")):
+        for path in fact_files:
             if not path.is_file():
                 continue
             rel_path = path.relative_to(self._book_dir).as_posix()
@@ -767,16 +784,16 @@ class ImpactAnalyzer:
         include_archived_state: bool,
     ) -> list[ImpactHit]:
         """维度 3：扫描活跃热池状态截面（含可选冷库状态）。"""
-        state_dir = self._book_dir / "03_state"
+        state_dir = resolve_state_root(self._book_dir)
         if not state_dir.is_dir():
             return []
 
         hits: list[ImpactHit] = []
-        char_paths = [state_dir / "active" / "characters.yaml"]
-        fac_paths = [state_dir / "active" / "factions.yaml"]
+        char_paths = [resolve_active_characters_file(self._book_dir)]
+        fac_paths = [resolve_active_factions_file(self._book_dir)]
         if include_archived_state:
-            char_paths.append(state_dir / "archive" / "characters.yaml")
-            fac_paths.append(state_dir / "archive" / "factions.yaml")
+            char_paths.append(resolve_archive_characters_file(self._book_dir))
+            fac_paths.append(resolve_archive_factions_file(self._book_dir))
 
         for char_path in char_paths:
             hits.extend(self._scan_character_state_file(char_path, query))
@@ -784,10 +801,10 @@ class ImpactAnalyzer:
         for fac_path in fac_paths:
             hits.extend(self._scan_faction_state_file(fac_path, query))
 
-        hits.extend(self._scan_world_state_file(state_dir / "world_state.yaml", query))
+        hits.extend(self._scan_world_state_file(resolve_world_state_file(self._book_dir), query))
         hits.extend(
             self._scan_relations_file(
-                state_dir / "relations.yaml",
+                resolve_relations_file(self._book_dir),
                 query,
                 after_chapter=after_chapter,
                 filter_active=True,
@@ -796,7 +813,7 @@ class ImpactAnalyzer:
         if include_archived_state:
             hits.extend(
                 self._scan_relations_file(
-                    state_dir / "archive" / "relations.yaml",
+                    resolve_archive_relations_file(self._book_dir),
                     query,
                     after_chapter=after_chapter,
                     filter_active=False,
@@ -989,7 +1006,7 @@ class ImpactAnalyzer:
 
     def _scan_threads(self, query: _QuerySpec) -> list[ImpactHit]:
         """维度 4：扫描 03_state/threads.yaml 中未完结伏笔（不含 archive/threads.yaml）。"""
-        threads_path = self._book_dir / "03_state" / "threads.yaml"
+        threads_path = resolve_threads_file(self._book_dir)
         threads_file = self._load_cached_yaml_model(threads_path, ThreadsFile)
         if threads_file is None:
             return []
@@ -1050,7 +1067,7 @@ class ImpactAnalyzer:
         if self._enable_corpus_cache and self._cached_blueprints is not None:
             return self._cached_blueprints
 
-        bp_dir = self._book_dir / "02_structure" / "blueprints"
+        bp_dir = resolve_blueprints_dir(self._book_dir)
         if not bp_dir.is_dir():
             if self._enable_corpus_cache:
                 self._cached_blueprints = []

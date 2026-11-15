@@ -238,7 +238,7 @@ def test_three_reasons_combinations_boundaries_and_overdue_window(tmp_path: Path
             "trigger_entities": ["char_other"],
         },
     ]
-    _write_threads_yaml(book_dir / "03_state" / "threads.yaml", threads)
+    _write_threads_yaml(book_dir / "03_状态" / "伏笔台账.yaml", threads)
 
     report = scan_foreshadow_radar(
         book_dir,
@@ -278,8 +278,8 @@ def test_exclusions_and_hot_sync_after_thread_delete_or_resolve(tmp_path: Path) 
     book_dir = tmp_path / "filter_sync_book"
     ProjectInitializer().init_book(book_dir, title="过滤热同步测试", genre_profile="general")
 
-    active_file = book_dir / "03_state" / "threads.yaml"
-    archive_file = book_dir / "03_state" / "archive" / "threads.yaml"
+    active_file = book_dir / "03_状态" / "伏笔台账.yaml"
+    archive_file = book_dir / "03_状态" / "归档" / "伏笔台账.yaml"
 
     _write_threads_yaml(
         active_file,

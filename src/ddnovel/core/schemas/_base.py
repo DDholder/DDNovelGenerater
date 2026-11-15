@@ -169,6 +169,7 @@ class HostKind(StrEnum):
     OPENCODE = "opencode"
     DSH = "dsh"
     CLAUDE = "claude"
+    ANTIGRAVITY = "antigravity"
 
 
 class IssueLevel(StrEnum):

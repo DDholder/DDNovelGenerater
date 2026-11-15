@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -20,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Final
 import yaml
 from pydantic import TypeAdapter, ValidationError
 
+from ddnovel import __version__
 from ddnovel.core import (
     ForeshadowRadar,
     ImpactAnalyzer,
@@ -28,6 +30,7 @@ from ddnovel.core import (
     ProgressiveParser,
     SqliteIndexer,
     estimate_tokens,
+    lint_model_setting_doc,
 )
 from ddnovel.core.parser import (
     CATEGORY_PREFIX_MAP,
@@ -35,10 +38,29 @@ from ddnovel.core.parser import (
     STATUS_MAP,
     THREAD_ACTION_MAP,
 )
+from ddnovel.core.paths import (
+    find_existing_blueprint_file,
+    find_existing_setting_file,
+    resolve_active_characters_file,
+    resolve_active_factions_file,
+    resolve_arc_file,
+    resolve_archive_characters_file,
+    resolve_archive_factions_file,
+    resolve_blueprint_file,
+    resolve_config_path,
+    resolve_draft_file,
+    resolve_facts_file,
+    resolve_packet_file,
+    resolve_relations_file,
+    resolve_setting_file,
+    resolve_settings_root,
+    resolve_threads_file,
+    resolve_volume_file,
+    resolve_world_state_file,
+)
 from ddnovel.core.schemas import (
     ARC_ID_PATTERN,
     ENTITY_ID_PATTERN,
-    NOVEL_CONFIG_FILENAME,
     THREAD_ID_PATTERN,
     VOLUME_ID_PATTERN,
     ArcDoc,
@@ -68,7 +90,6 @@ from ddnovel.core.schemas import (
     VolumeDoc,
     VolumeId,
     WorldState,
-    format_chapter,
 )
 
 if TYPE_CHECKING:
@@ -146,11 +167,11 @@ def resolve_book_dir(
 
 
 def _load_config_or_default(book_dir: Path) -> NovelConfig:
-    """加载书库 ``novel.yaml`` 配置；若文件尚不存在则返回默认配置。"""
-    cfg_path = book_dir / NOVEL_CONFIG_FILENAME
+    """加载书库 ``小说配置.yaml``（兼容 ``novel.yaml``）；若文件尚不存在则返回默认配置。"""
+    cfg_path = resolve_config_path(book_dir)
     if cfg_path.is_file():
         return NovelConfig.load(book_dir)
-    return NovelConfig(title=book_dir.name or "Untitled")
+    return NovelConfig(title=book_dir.name or "未命名小说")
 
 
 def _dump_yaml(data: Any) -> str:
@@ -231,16 +252,17 @@ def _normalize_entity_id_for_category(raw_id: str, category: SettingCategory) ->
 
 
 def _find_existing_setting_path(book_dir: Path, entity_id: str) -> Path | None:
-    """若 ``01_settings/`` 下已存在相同 ``entity_id`` 的设定文件，返回其路径以便原位更新。"""
-    settings_root = book_dir / "01_settings"
+    """若 ``01_设定集/`` 下已存在相同 ``entity_id`` 的设定文件，返回其路径以便原位更新。"""
+    direct = find_existing_setting_file(book_dir, entity_id)
+    if direct is not None:
+        return direct
+    settings_root = resolve_settings_root(book_dir)
     if not settings_root.is_dir():
         return None
     parser = ProgressiveParser(book_dir=book_dir)
     for md_path in sorted(settings_root.rglob("*.md")):
         if not md_path.is_file():
             continue
-        if md_path.stem.lower() == entity_id:
-            return md_path
         try:
             doc = parser.parse_setting_md(md_path, book_dir=book_dir)
             if doc.id == entity_id:
@@ -362,7 +384,12 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         sync_index: bool = True,
         book_dir: str | None = None,
     ) -> str:
-        """新建或更新设定卡片（01_settings/），支持 [核心]/[专题]/[机密] 三级渐进切片并自动热同步索引。"""
+        """新建或更新模型侧静态设定卡片（01_设定集/<分类>/<id>-<对象名>.md），
+        支持 [核心]/[专题]/[机密] 三级渐进切片并自动热同步索引。
+
+        注意：本工具面向模型创作层（01_设定集/），写入前应确保已完成“三留三剥离”抽象提炼，
+        勿混入作者随笔、备忘、具象示范场景、台词例句或动作指令清单（此类内容应留在 00_作者设定/）。
+        """
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             cat_enum = _normalize_category(category)
@@ -373,11 +400,13 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 raise ValueError("设定名称 name 不能为空字符串")
 
             existing_path = _find_existing_setting_path(root, norm_id)
-            if existing_path is not None:
-                target_path = existing_path
-            else:
-                sub_dir = _CATEGORY_DIR_MAP.get(cat_enum, "other")
-                target_path = root / "01_settings" / sub_dir / f"{norm_id}.md"
+            target_path = resolve_setting_file(
+                root,
+                norm_id,
+                cat_enum,
+                name=clean_name,
+                for_write=True,
+            )
 
             md_text = _build_setting_markdown(
                 entity_id=norm_id,
@@ -392,9 +421,16 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
             )
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(md_text, encoding="utf-8")
+            if (
+                existing_path is not None
+                and existing_path.is_file()
+                and not existing_path.samefile(target_path)
+            ):
+                existing_path.unlink(missing_ok=True)
 
             parser = ProgressiveParser(book_dir=root)
             parsed_doc: SettingDoc = parser.parse_setting_md(target_path, book_dir=root)
+            abstraction_warnings = lint_model_setting_doc(parsed_doc)
 
             sync_report_dict: dict[str, Any] | None = None
             if sync_index:
@@ -402,6 +438,15 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     sync_report_dict = indexer.sync().model_dump(mode="json")
 
             rel_path = target_path.resolve().relative_to(root).as_posix()
+            summary = (
+                f"✅ 已保存设定卡 `{parsed_doc.id}` ({parsed_doc.name}, "
+                f"分类={parsed_doc.category.value}) -> `{rel_path}`"
+            )
+            if abstraction_warnings:
+                summary += (
+                    f"（⚠️ 检测到 {len(abstraction_warnings)} 项具象台词/场景/动作泄露风险，"
+                    "请移入 00_作者设定/ 并提炼为抽象特征）"
+                )
             return _format_response(
                 {
                     "ok": True,
@@ -409,11 +454,9 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     "action": "updated" if existing_path is not None else "created",
                     "file_path": rel_path,
                     "setting": parsed_doc.model_dump(mode="json"),
+                    "abstraction_warnings": abstraction_warnings,
                     "sync_report": sync_report_dict,
-                    "summary": (
-                        f"✅ 已保存设定卡 `{parsed_doc.id}` ({parsed_doc.name}, "
-                        f"分类={parsed_doc.category.value}) -> `{rel_path}`"
-                    ),
+                    "summary": summary,
                 }
             )
         except (FileNotFoundError, KeyError, ValueError, ValidationError) as exc:
@@ -526,13 +569,17 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         sync_index: bool = True,
         book_dir: str | None = None,
     ) -> str:
-        """创建或更新分卷规划文档（02_structure/volumes/vol_XX.md，支持完结卷级折叠大事记）。"""
+        """创建或更新分卷规划文档（02_结构/分卷/第XX卷-<卷名>.md，支持完结卷级折叠大事记）。
+
+        粒度约束：分卷规划只到剧情单元（Arc）划分与定位，严禁在分卷正文中越级设计具体章节内容；具体章节排布归属单元设计（novel_upsert_arc）。
+        """
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             vid = volume_id.strip().lower()
             if not _VOLUME_ID_RE.fullmatch(vid):
                 raise ValueError(f"volume_id 必须符合 'vol_XX' 格式（如 'vol_01'），收到: {volume_id!r}")
 
+            existing_vol = resolve_volume_file(root, vid, for_write=False)
             win = _coerce_chapter_window(chapter_range)
             vol_doc = VolumeDoc(
                 id=vid,
@@ -549,12 +596,19 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 "core_conflict": vol_doc.core_conflict,
                 "folded_summary": vol_doc.folded_summary,
             }
-            vol_path = root / "02_structure" / "volumes" / f"{vol_doc.id}.md"
+            vol_path = resolve_volume_file(
+                root,
+                vol_doc.id,
+                title=vol_doc.title or "",
+                for_write=True,
+            )
             default_body = (
                 vol_doc.body or f"# {vol_doc.title or vol_doc.id}\n\n{vol_doc.core_conflict}".strip()
             )
             vol_path.parent.mkdir(parents=True, exist_ok=True)
             vol_path.write_text(_render_frontmatter_md(frontmatter, default_body), encoding="utf-8")
+            if existing_vol.is_file() and not existing_vol.samefile(vol_path):
+                existing_vol.unlink(missing_ok=True)
 
             if sync_index:
                 with SqliteIndexer(root) as indexer:
@@ -584,7 +638,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         sync_index: bool = True,
         book_dir: str | None = None,
     ) -> str:
-        """创建或更新剧情单元文档（02_structure/arcs/vol_XX_arc_YY.md，含起承转合与单元折叠摘要）。"""
+        """创建或更新剧情单元文档（02_结构/单元/第XX卷_第YY单元-<单元名>.md，含起承转合、章节内容排布与单元折叠摘要）。"""
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             aid = arc_id.strip().lower()
@@ -592,6 +646,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 raise ValueError(
                     f"arc_id 必须符合 'vol_XX_arc_YY' 格式（如 'vol_01_arc_01'），收到: {arc_id!r}"
                 )
+            existing_arc = resolve_arc_file(root, aid, for_write=False)
             vid = volume_id.strip().lower() if volume_id and volume_id.strip() else None
             win = _coerce_chapter_window(chapter_range)
             arc_doc = ArcDoc(
@@ -609,10 +664,17 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 "chapter_range": list(arc_doc.chapter_range) if arc_doc.chapter_range else None,
                 "folded_summary": arc_doc.folded_summary,
             }
-            arc_path = root / "02_structure" / "arcs" / f"{arc_doc.id}.md"
+            arc_path = resolve_arc_file(
+                root,
+                arc_doc.id,
+                title=arc_doc.title or "",
+                for_write=True,
+            )
             default_body = arc_doc.body or f"# {arc_doc.title or arc_doc.id}".strip()
             arc_path.parent.mkdir(parents=True, exist_ok=True)
             arc_path.write_text(_render_frontmatter_md(frontmatter, default_body), encoding="utf-8")
+            if existing_arc.is_file() and not existing_arc.samefile(arc_path):
+                existing_arc.unlink(missing_ok=True)
 
             if sync_index:
                 with SqliteIndexer(root) as indexer:
@@ -651,13 +713,14 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         sync_index: bool = True,
         book_dir: str | None = None,
     ) -> str:
-        """创建或更新单章分场节拍蓝图（02_structure/blueprints/vol_XX/ch_XXXX.md）。"""
+        """创建或更新单章分场节拍蓝图（02_结构/章节蓝图/第XX卷/第XXXX章-<章节标题>.md）。"""
         try:
             if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
                 raise ValueError(f"chapter 必须为 >= 1 的整数，收到: {chapter!r}")
 
             root = resolve_book_dir(book_dir, default_book_dir)
             cfg = _load_config_or_default(root)
+            existing_bp = find_existing_blueprint_file(root, chapter, width=cfg.chapter_id_width)
 
             resolved_vol = (
                 volume_id.strip().lower()
@@ -727,11 +790,23 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 "beats": [b.model_dump(mode="json") for b in bp_doc.beats],
             }
 
-            ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-            bp_path = root / "02_structure" / "blueprints" / resolved_vol / f"{ch_prefix}.md"
+            bp_path = resolve_blueprint_file(
+                root,
+                resolved_vol,
+                chapter,
+                width=cfg.chapter_id_width,
+                title=bp_doc.title or "",
+                for_write=True,
+            )
             bp_path.parent.mkdir(parents=True, exist_ok=True)
             bp_body = bp_doc.body or f"# 第 {chapter} 章：{bp_doc.title}"
             bp_path.write_text(_render_frontmatter_md(frontmatter, bp_body), encoding="utf-8")
+            if (
+                existing_bp is not None
+                and existing_bp.is_file()
+                and not existing_bp.samefile(bp_path)
+            ):
+                existing_bp.unlink(missing_ok=True)
 
             parsed_bp = ProgressiveParser(book_dir=root).parse_blueprint_md(bp_path, book_dir=root)
 
@@ -804,7 +879,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         include_content: bool = False,
         book_dir: str | None = None,
     ) -> str:
-        """一步直出编译单章独立写作包（04_creation/packets/ch_XXXX_packet.md，执行三重物理隔离与预算裁剪）。"""
+        """一步直出编译单章独立写作包（04_创作/写作包/第XXXX章_写作包.md，执行三重物理隔离与预算裁剪）。"""
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             with PacketBuilder(root) as builder:
@@ -844,9 +919,8 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
 
             root = resolve_book_dir(book_dir, default_book_dir)
             cfg = _load_config_or_default(root)
-            ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-            packet_rel = f"04_creation/packets/{ch_prefix}_packet.md"
-            packet_abs = root / packet_rel
+            packet_abs = resolve_packet_file(root, chapter, width=cfg.chapter_id_width)
+            packet_rel = packet_abs.relative_to(root).as_posix()
 
             built_on_demand = False
             if not packet_abs.is_file() and auto_build:
@@ -892,7 +966,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         content: str,
         book_dir: str | None = None,
     ) -> str:
-        """保存整章草稿正文至 04_creation/drafts/ch_XXXX_draft.md，供作者一次性通篇审阅修改。"""
+        """保存整章草稿正文至 04_创作/草稿/第XXXX章_草稿.md，供作者一次性通篇审阅修改。"""
         try:
             if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
                 raise ValueError(f"chapter 必须为 >= 1 的整数，收到: {chapter!r}")
@@ -901,9 +975,10 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
 
             root = resolve_book_dir(book_dir, default_book_dir)
             cfg = _load_config_or_default(root)
-            ch_prefix = format_chapter(chapter, width=cfg.chapter_id_width)
-            draft_rel = f"04_creation/drafts/{ch_prefix}_draft.md"
-            draft_abs = root / draft_rel
+            draft_abs = resolve_draft_file(
+                root, chapter, width=cfg.chapter_id_width, for_write=True
+            )
+            draft_rel = draft_abs.relative_to(root).as_posix()
 
             clean_content = content.strip() + "\n"
             draft_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -940,7 +1015,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         dry_run: bool = False,
         book_dir: str | None = None,
     ) -> str:
-        """将审校通过的章节草稿正式定稿归档至 manuscript/，并自动触发超期旧写作包/旧草稿 TTL 清理。"""
+        """将审校通过的章节草稿正式定稿归档至 04_创作/定稿/，并自动触发超期旧写作包/旧草稿 TTL 清理。"""
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             with LifecycleManager(root) as mgr:
@@ -983,7 +1058,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         sync_index: bool = True,
         book_dir: str | None = None,
     ) -> str:
-        """沉淀单章百字摘要与原子事实（vol_XX_facts.jsonl），并覆写更新活跃状态截面、关系网与伏笔台账。"""
+        """沉淀单章百字摘要与原子事实（03_状态/历史/第XX卷_事实.jsonl），并覆写更新活跃状态截面、关系网与伏笔台账。"""
         try:
             if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
                 raise ValueError(f"chapter 必须为 >= 1 的整数，收到: {chapter!r}")
@@ -1015,8 +1090,8 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
 
             updated_files: list[str] = []
 
-            # 1) 写入/更新 03_state/history/<vol_id>_facts.jsonl（按章号幂等覆写并保序）
-            history_path = root / "03_state" / "history" / f"{resolved_vol}_facts.jsonl"
+            # 1) 写入/更新 03_状态/历史/<第XX卷>_事实.jsonl（按章号幂等覆写并保序）
+            history_path = resolve_facts_file(root, resolved_vol, for_write=True)
             history_path.parent.mkdir(parents=True, exist_ok=True)
             existing_records: dict[int, ChapterFactRecord] = {}
             if history_path.is_file():
@@ -1035,8 +1110,8 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
             history_rel = history_path.resolve().relative_to(root).as_posix()
             updated_files.append(history_rel)
 
-            # 2) 更新 03_state/world_state.yaml 与 novel.yaml 当前章水位
-            ws_path = root / "03_state" / "world_state.yaml"
+            # 2) 更新 03_状态/世界状态.yaml 与 小说配置.yaml 当前章水位
+            ws_path = resolve_world_state_file(root, for_write=True)
             raw_ws = yaml.safe_load(ws_path.read_text(encoding="utf-8")) if ws_path.is_file() else {}
             ws_obj = WorldState.model_validate(raw_ws if isinstance(raw_ws, dict) else {})
             new_ws = ws_obj.model_copy(
@@ -1061,15 +1136,15 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
             )
             updated_files.append(ws_path.resolve().relative_to(root).as_posix())
 
-            cfg_path = root / NOVEL_CONFIG_FILENAME
+            cfg_path = resolve_config_path(root, for_write=True)
             if cfg_path.is_file() and chapter > cfg.current_chapter:
                 cfg = cfg.model_copy(update={"current_chapter": chapter})
                 cfg.dump(root)
-                updated_files.append(NOVEL_CONFIG_FILENAME)
+                updated_files.append(cfg_path.name)
 
-            # 3) 按需覆写角色状态截面 03_state/active/characters.yaml（含冷库唤醒）
+            # 3) 按需覆写角色状态截面 03_状态/当前/人物状态.yaml（含冷库唤醒）
             if character_updates:
-                chars_path = root / "03_state" / "active" / "characters.yaml"
+                chars_path = resolve_active_characters_file(root, for_write=True)
                 raw_chars = (
                     yaml.safe_load(chars_path.read_text(encoding="utf-8"))
                     if chars_path.is_file()
@@ -1077,7 +1152,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 )
                 chars_dict: dict[str, Any] = dict(raw_chars) if isinstance(raw_chars, dict) else {}
 
-                arch_chars_path = root / "03_state" / "archive" / "characters.yaml"
+                arch_chars_path = resolve_archive_characters_file(root, for_write=True)
                 raw_arch_chars = (
                     yaml.safe_load(arch_chars_path.read_text(encoding="utf-8"))
                     if arch_chars_path.is_file()
@@ -1121,9 +1196,9 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     )
                     updated_files.append(arch_chars_path.resolve().relative_to(root).as_posix())
 
-            # 4) 按需覆写势力状态截面 03_state/active/factions.yaml（含冷库唤醒）
+            # 4) 按需覆写势力状态截面 03_状态/当前/势力状态.yaml（含冷库唤醒）
             if faction_updates:
-                facs_path = root / "03_state" / "active" / "factions.yaml"
+                facs_path = resolve_active_factions_file(root, for_write=True)
                 raw_facs = (
                     yaml.safe_load(facs_path.read_text(encoding="utf-8"))
                     if facs_path.is_file()
@@ -1131,7 +1206,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 )
                 facs_dict: dict[str, Any] = dict(raw_facs) if isinstance(raw_facs, dict) else {}
 
-                arch_facs_path = root / "03_state" / "archive" / "factions.yaml"
+                arch_facs_path = resolve_archive_factions_file(root, for_write=True)
                 raw_arch_facs = (
                     yaml.safe_load(arch_facs_path.read_text(encoding="utf-8"))
                     if arch_facs_path.is_file()
@@ -1175,9 +1250,9 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                     )
                     updated_files.append(arch_facs_path.resolve().relative_to(root).as_posix())
 
-            # 5) 按需更新双时态关系边 03_state/relations.yaml
+            # 5) 按需更新双时态关系边 03_状态/人物关系.yaml
             if relation_updates:
-                rel_path = root / "03_state" / "relations.yaml"
+                rel_path = resolve_relations_file(root, for_write=True)
                 raw_rels = (
                     yaml.safe_load(rel_path.read_text(encoding="utf-8"))
                     if rel_path.is_file()
@@ -1224,9 +1299,9 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
                 )
                 updated_files.append(rel_path.resolve().relative_to(root).as_posix())
 
-            # 6) 按需更新悬线与事件伏笔台账 03_state/threads.yaml
+            # 6) 按需更新悬线与事件伏笔台账 03_状态/伏笔台账.yaml
             if thread_updates:
-                thr_path = root / "03_state" / "threads.yaml"
+                thr_path = resolve_threads_file(root, for_write=True)
                 raw_thrs = (
                     yaml.safe_load(thr_path.read_text(encoding="utf-8"))
                     if thr_path.is_file()
@@ -1415,7 +1490,7 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
         dry_run: bool = False,
         book_dir: str | None = None,
     ) -> str:
-        """执行退场/死亡/久未登场实体、失效关系边与已完结伏笔的冷库休眠冻结（03_state/archive/）。"""
+        """执行退场/死亡/久未登场实体、失效关系边与已完结伏笔的冷库休眠冻结（03_状态/归档/）。"""
         try:
             root = resolve_book_dir(book_dir, default_book_dir)
             with LifecycleManager(root) as mgr:
@@ -1580,9 +1655,30 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
     return mcp
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     """``ddnovel-mcp`` 命令行入口：启动 Stdio MCP Server。"""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if any(flag in args for flag in ("-h", "--help")):
+        print(
+            "Usage: ddnovel-mcp [OPTIONS]\n\n"
+            "DDNovelGenerater FastMCP Stdio 工具服务端"
+            "（供 OpenCode / Claude Code / DSH / Antigravity 等宿主连接）。\n\n"
+            "选项:\n"
+            "  -h, --help     显示本帮助信息并退出\n"
+            "  -V, --version  显示版本号并退出\n\n"
+            "环境变量:\n"
+            "  DDNOVEL_BOOK_DIR  默认小说书库根目录路径（未指定时取当前工作目录 '.'）\n\n"
+            "注意: 不带参数直接运行时将进入 Stdio JSON-RPC 监听模式等待 AI 宿主连接。"
+        )
+        return
+    if any(flag in args for flag in ("-V", "--version")):
+        print(f"ddnovel-mcp {__version__}")
+        return
     create_server().run()
+
+
+if __name__ == "__main__":
+    main()
 
 
 __all__ = [

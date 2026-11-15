@@ -22,9 +22,25 @@ import yaml
 
 from .alias_matcher import AliasMatcher
 from .indexer import SqliteIndexer
-from .parser import ProgressiveParser, estimate_tokens, split_frontmatter
+from .parser import ProgressiveParser, estimate_tokens, lint_model_setting_doc, split_frontmatter
+from .paths import (
+    format_chapter_stem,
+    infer_arc_id_from_stem,
+    infer_volume_id_from_stem,
+    is_archive_path,
+    resolve_arc_file,
+    resolve_arcs_dir,
+    resolve_blueprints_dir,
+    resolve_config_path,
+    resolve_manuscript_dir,
+    resolve_packet_file,
+    resolve_style_guide_file,
+    resolve_volume_file,
+    resolve_volume_subdir,
+    resolve_volumes_dir,
+    resolve_world_state_file,
+)
 from .schemas import (
-    NOVEL_CONFIG_FILENAME,
     ArcDoc,
     BlueprintDoc,
     CharacterState,
@@ -111,8 +127,7 @@ class _ThreadRow:
 
     @property
     def is_archived_or_resolved(self) -> bool:
-        parts = Path(self.source_file).parts
-        return "archive" in parts or self.thread.status == ThreadStatus.RESOLVED
+        return is_archive_path(self.source_file) or self.thread.status == ThreadStatus.RESOLVED
 
 
 @dataclass(slots=True)
@@ -244,11 +259,11 @@ class PacketBuilder:
         elif indexer is not None:
             self._config = indexer.config
         else:
-            cfg_path = self._book_dir / NOVEL_CONFIG_FILENAME
+            cfg_path = resolve_config_path(self._book_dir)
             if cfg_path.is_file():
                 self._config = NovelConfig.load(self._book_dir)
             else:
-                self._config = NovelConfig()
+                self._config = NovelConfig(title=self._book_dir.name or "未命名小说")
 
         self._parser: ProgressiveParser = (
             parser if parser is not None else ProgressiveParser(book_dir=self._book_dir)
@@ -372,9 +387,13 @@ class PacketBuilder:
             dropped_by_slot=dropped_by_slot,
         )
 
-        ch_prefix = format_chapter(chapter_num, width=self._config.chapter_id_width)
-        packet_rel_path = f"04_creation/packets/{ch_prefix}_packet.md"
-        packet_abs_path = self._book_dir / packet_rel_path
+        packet_abs_path = resolve_packet_file(
+            self._book_dir,
+            chapter_num,
+            width=self._config.chapter_id_width,
+            for_write=True,
+        )
+        packet_rel_path = packet_abs_path.relative_to(self._book_dir).as_posix()
         packet_abs_path.parent.mkdir(parents=True, exist_ok=True)
         packet_abs_path.write_text(final_markdown, encoding="utf-8")
 
@@ -518,7 +537,7 @@ class PacketBuilder:
         return found
 
     def _locate_and_parse_blueprint(self, chapter_num: int) -> BlueprintDoc:
-        bp_root = self._book_dir / "02_structure" / "blueprints"
+        bp_root = resolve_blueprints_dir(self._book_dir)
         if not bp_root.is_dir():
             raise FileNotFoundError(f"未找到第 {chapter_num} 章的章节蓝图文件（目录不存在: {bp_root}）")
 
@@ -527,12 +546,15 @@ class PacketBuilder:
             raise FileNotFoundError(f"未找到第 {chapter_num} 章的章节蓝图文件")
 
         expected_stem = format_chapter(chapter_num, width=self._config.chapter_id_width)
-        ch_stem_re = re.compile(rf"^ch_?0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
+        expected_zh_stem = format_chapter_stem(
+            chapter_num, width=self._config.chapter_id_width, legacy=False
+        )
+        ch_stem_re = re.compile(rf"^(?:ch_?|第)0*{chapter_num}(?:$|[^0-9])", re.IGNORECASE)
 
         prioritized: list[Path] = []
         fallback: list[Path] = []
         for path in all_files:
-            if path.stem == expected_stem or ch_stem_re.match(path.stem):
+            if path.stem in (expected_stem, expected_zh_stem) or ch_stem_re.match(path.stem):
                 prioritized.append(path)
             else:
                 fallback.append(path)
@@ -761,6 +783,11 @@ class PacketBuilder:
         else:
             pov_lines.append("- **本章叙事主视角 (POV)**：未指定单一角色（仍须严守蓝图禁止项与已隔离机密）")
 
+        pov_lines.append(
+            "- **【设定使用边界 · 严禁照抄打卡】**：背景与实体档案中的设定仅提供客观本底与抽象性格/规则边界，"
+            "严禁将背景特征当作本章必演动作逐条打卡或照搬词句；具体场景、对话与动作均由尾部本章分场节拍自然驱动。"
+        )
+
         items.append(
             _SlotItem(
                 group="pov_guardrails",
@@ -801,9 +828,9 @@ class PacketBuilder:
         return items
 
     def _load_style_guide(self, ctx: _BuildContext) -> StyleGuide | None:
-        sg_path = self._book_dir / "04_creation" / "style_guide.md"
+        sg_path = resolve_style_guide_file(self._book_dir)
         if not sg_path.is_file():
-            ctx.add_warning("未找到文风指南文件 04_creation/style_guide.md")
+            ctx.add_warning("未找到文风指南文件 04_创作/文风指南.md (04_creation/style_guide.md)")
             return None
 
         raw_text = sg_path.read_text(encoding="utf-8")
@@ -947,9 +974,9 @@ class PacketBuilder:
         return items
 
     def _load_world_state(self, ctx: _BuildContext) -> WorldState | None:
-        ws_path = self._book_dir / "03_state" / "world_state.yaml"
+        ws_path = resolve_world_state_file(self._book_dir)
         if not ws_path.is_file():
-            ctx.add_warning("未找到全局世界状态文件 03_state/world_state.yaml")
+            ctx.add_warning("未找到全局世界状态文件 03_状态/世界状态.yaml (03_state/world_state.yaml)")
             return None
         data = yaml.safe_load(ws_path.read_text(encoding="utf-8"))
         if not data:
@@ -957,19 +984,19 @@ class PacketBuilder:
         return WorldState.model_validate(data)
 
     def _load_volume_doc(self, volume_id: str | None, chapter_num: int) -> VolumeDoc | None:
-        vol_dir = self._book_dir / "02_structure" / "volumes"
+        vol_dir = resolve_volumes_dir(self._book_dir)
         if not vol_dir.is_dir():
             return None
 
         if volume_id:
-            target = vol_dir / f"{volume_id}.md"
+            target = resolve_volume_file(self._book_dir, volume_id)
             if target.is_file():
                 fm, body = split_frontmatter(target.read_text(encoding="utf-8"))
                 return VolumeDoc.model_validate({**fm, "id": fm.get("id") or volume_id, "body": body})
 
         for path in sorted(vol_dir.glob("*.md")):
             fm, body = split_frontmatter(path.read_text(encoding="utf-8"))
-            vid = fm.get("id") or path.stem
+            vid = fm.get("id") or infer_volume_id_from_stem(path.stem)
             try:
                 doc = VolumeDoc.model_validate({**fm, "id": vid, "body": body})
             except Exception:
@@ -982,19 +1009,19 @@ class PacketBuilder:
         return None
 
     def _load_arc_doc(self, arc_id: str | None, chapter_num: int) -> ArcDoc | None:
-        arc_dir = self._book_dir / "02_structure" / "arcs"
+        arc_dir = resolve_arcs_dir(self._book_dir)
         if not arc_dir.is_dir():
             return None
 
         if arc_id:
-            target = arc_dir / f"{arc_id}.md"
+            target = resolve_arc_file(self._book_dir, arc_id)
             if target.is_file():
                 fm, body = split_frontmatter(target.read_text(encoding="utf-8"))
                 return ArcDoc.model_validate({**fm, "id": fm.get("id") or arc_id, "body": body})
 
         for path in sorted(arc_dir.glob("*.md")):
             fm, body = split_frontmatter(path.read_text(encoding="utf-8"))
-            aid = fm.get("id") or path.stem
+            aid = fm.get("id") or infer_arc_id_from_stem(path.stem)
             try:
                 doc = ArcDoc.model_validate({**fm, "id": aid, "body": body})
             except Exception:
@@ -1245,6 +1272,9 @@ class PacketBuilder:
         """渲染设定文档的核心切片、按需专题与解锁机密（默认严格拦截机密）。"""
         bp = ctx.blueprint
         is_unlocked = setting.id in bp.unlock_secrets
+
+        for leak_warn in lint_model_setting_doc(setting):
+            ctx.add_warning(f"设定卡 `{setting.id}` ({setting.name}) 存在具象泄露风险：{leak_warn}")
 
         if setting.secret_text and setting.secret_text.strip() and not is_unlocked:
             ctx.mark_blocked_secret(setting.id, setting.secret_text)
@@ -1514,16 +1544,28 @@ class PacketBuilder:
         return items
 
     def _load_previous_manuscript_text(self, prev_ch: int) -> str | None:
-        ms_root = self._book_dir / "04_creation" / "manuscript"
+        ms_root = resolve_manuscript_dir(self._book_dir)
         if not ms_root.is_dir():
             return None
 
         expected_stem = format_chapter(prev_ch, width=self._config.chapter_id_width)
-        direct_candidates: list[Path] = [ms_root / f"{expected_stem}.md"]
+        expected_zh_stem = format_chapter_stem(
+            prev_ch, width=self._config.chapter_id_width, legacy=False
+        )
+        direct_candidates: list[Path] = [
+            ms_root / f"{expected_zh_stem}.md",
+            ms_root / f"{expected_stem}.md",
+        ]
         if self._active_ctx is not None and self._active_ctx.blueprint.volume_id:
-            direct_candidates.insert(
-                0, ms_root / self._active_ctx.blueprint.volume_id / f"{expected_stem}.md"
-            )
+            vid = self._active_ctx.blueprint.volume_id
+            vol_sub = resolve_volume_subdir(ms_root, vid)
+            direct_candidates = [
+                vol_sub / f"{expected_zh_stem}.md",
+                vol_sub / f"{expected_stem}.md",
+                ms_root / vid / f"{expected_zh_stem}.md",
+                ms_root / vid / f"{expected_stem}.md",
+                *direct_candidates,
+            ]
         for cand in direct_candidates:
             if cand.is_file():
                 return self._clean_manuscript_body(cand.read_text(encoding="utf-8"))
@@ -1532,10 +1574,10 @@ class PacketBuilder:
         if not all_files:
             return None
 
-        ch_stem_re = re.compile(rf"^ch_?0*{prev_ch}(?:$|[^0-9])", re.IGNORECASE)
+        ch_stem_re = re.compile(rf"^(?:ch_?|第)0*{prev_ch}(?:$|[^0-9])", re.IGNORECASE)
 
         for path in all_files:
-            if path.stem == expected_stem or ch_stem_re.match(path.stem):
+            if path.stem in (expected_stem, expected_zh_stem) or ch_stem_re.match(path.stem):
                 return self._clean_manuscript_body(path.read_text(encoding="utf-8"))
 
         title_re = re.compile(rf"^\s*#\s*第\s*0*{prev_ch}\s*章", re.MULTILINE)
