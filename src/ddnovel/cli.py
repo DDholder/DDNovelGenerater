@@ -30,10 +30,14 @@ from ddnovel.core import (
     LifecycleManager,
     PacketBuilder,
     ProgressiveParser,
+    ReaderExporter,
     SqliteIndexer,
+    build_reader_patch,
     estimate_tokens,
     lint_model_setting_doc,
+    pack_reader_book,
     split_frontmatter,
+    validate_reader_target,
 )
 from ddnovel.core.parser import CATEGORY_SYNONYMS
 from ddnovel.core.paths import (
@@ -50,6 +54,7 @@ from ddnovel.core.paths import (
     resolve_draft_file,
     resolve_facts_file,
     resolve_packet_file,
+    resolve_reader_pack_dir,
     resolve_relations_file,
     resolve_setting_file,
     resolve_settings_root,
@@ -91,6 +96,11 @@ from ddnovel.core.schemas import (
     WorldState,
 )
 from ddnovel.templates import ProjectInitializer
+from ddnovel.web import (
+    build_dashboard_snapshot,
+    render_standalone_html,
+    serve_web_ui,
+)
 
 # 汉化 Typer/Rich 帮助与错误面板标题
 _typer_rich_utils.ARGUMENTS_PANEL_TITLE = "参数"
@@ -122,7 +132,10 @@ app = typer.Typer(
         "  ddnovel packet build 10 -b 6000                                编译单章写作包\n"
         "  ddnovel draft save 10 -f ./ch10.md && ddnovel audit 10         存草稿并一致性体检\n"
         "  ddnovel chapter promote 10 -v vol_01                           审校定稿入库\n"
-        "  ddnovel state update -c 10 -s '本章摘要' -F '事实1' -F '事实2'   结算章节状态与事实\n\n"
+        "  ddnovel state update -c 10 -s '本章摘要' -F '事实1' -F '事实2'   结算章节状态与事实\n"
+        "  ddnovel reader plan 1 -d .                                     单章伴读设计与资源需求提案\n"
+        "  ddnovel reader export -d .                                     生成适配 DDNovelReader 的作品包 (.ddbook)\n"
+        "  ddnovel web -d . -p 8765                                       启动可视化状态与关系看板 Web UI\n\n"
         "提示: 任意子命令均可加 -h 或 --help 查看详细参数与示例，例如: ddnovel state update -h"
     ),
     no_args_is_help=True,
@@ -199,8 +212,24 @@ history_app = typer.Typer(
 )
 host_app = typer.Typer(
     name="host",
-    help="AI 宿主配置同步与全局插件安装 (opencode / dsh / claude / antigravity)",
-    epilog="示例: ddnovel host install antigravity  |  ddnovel host sync -d . -H antigravity",
+    help="AI 宿主配置同步与全局插件安装 (opencode / dsh / claude / antigravity / codex | chatgpt)",
+    epilog=(
+        "示例: ddnovel host install antigravity  |  "
+        "ddnovel host install codex  |  "
+        "ddnovel host sync -d . -H codex"
+    ),
+    no_args_is_help=True,
+    context_settings=_CONTEXT_SETTINGS,
+)
+reader_app = typer.Typer(
+    name="reader",
+    help="DDNovelReader (.ddbook / .ddpatch) 伴读作品包导出、单章资源规划、校验与打包",
+    epilog=(
+        "示例: ddnovel reader plan 1 -d .  |  "
+        "ddnovel reader export -d .  |  "
+        "ddnovel reader export -d . -c 1  |  "
+        "ddnovel reader validate -d ."
+    ),
     no_args_is_help=True,
     context_settings=_CONTEXT_SETTINGS,
 )
@@ -215,6 +244,7 @@ app.add_typer(index_app, name="index")
 app.add_typer(thread_app, name="thread")
 app.add_typer(history_app, name="history")
 app.add_typer(host_app, name="host")
+app.add_typer(reader_app, name="reader")
 
 _ENTITY_ID_ADAPTER: TypeAdapter[str] = TypeAdapter(EntityId)
 _VOLUME_DIR_RE: re.Pattern[str] = re.compile(VOLUME_ID_PATTERN)
@@ -500,7 +530,7 @@ def init_cmd(
         typer.Option(
             "--host",
             "-H",
-            help="生成指定 AI 宿主配置与 Skills 目录 (opencode | dsh | claude | antigravity)，可多次指定",
+            help="生成指定 AI 宿主配置与 Skills 目录 (opencode | dsh | claude | antigravity | codex | chatgpt)，可多次指定",
         ),
     ] = None,
     mcp_command: Annotated[
@@ -570,9 +600,13 @@ def _run_host_install(
     host: str,
     plugin_dir: Path | None,
     mcp_command: list[str] | None,
+    reader_dir: Path | None,
     no_overwrite: bool,
 ) -> None:
-    initializer = ProjectInitializer(mcp_command=_parse_mcp_command_opt(mcp_command))
+    initializer = ProjectInitializer(
+        mcp_command=_parse_mcp_command_opt(mcp_command),
+        reader_dir=reader_dir,
+    )
     res = initializer.install_global_plugin(
         host,
         plugin_dir=plugin_dir,
@@ -585,8 +619,13 @@ def _run_host_install(
     table.add_row("宿主类型", res.host.value)
     table.add_row("插件安装目录", res.plugin_dir.as_posix())
     table.add_row("MCP 启动命令", " ".join(res.mcp_command))
+    if initializer.reader_mcp_command is not None:
+        table.add_row("DDNovelReader MCP", " ".join(initializer.reader_mcp_command))
     table.add_row("写入/更新文件数", str(len(res.written_files)))
-    table.add_row("Antigravity 管理页", f"customization://{res.plugin_dir.name}")
+    if res.host.value == "codex":
+        table.add_row("适用桌面客户端", "Codex Desktop / ChatGPT Desktop (Codex & Work 模式) / Codex CLI")
+    else:
+        table.add_row("Antigravity 管理页", f"customization://{res.plugin_dir.name}")
     console.print(table)
 
 
@@ -595,21 +634,24 @@ def _run_host_install(
     epilog=(
         "示例:\n"
         "  ddnovel host install antigravity\n"
-        "  ddnovel host install antigravity -m 'uv run --directory D:/repo ddnovel-mcp'"
+        "  ddnovel host install antigravity --reader-dir D:/work/AI/proj/DDNovelReader\n"
+        "  ddnovel host install codex\n"
+        "  ddnovel host install chatgpt\n"
+        "  ddnovel host install codex -m 'uv run --directory D:/repo ddnovel-mcp'"
     ),
 )
 @_cli_guard
 def host_install_cmd(
     host: Annotated[
         str,
-        typer.Argument(help="目标全局插件宿主类型（目前支持 antigravity）"),
+        typer.Argument(help="目标全局插件宿主类型（支持 antigravity / codex / chatgpt）"),
     ] = "antigravity",
     plugin_dir: Annotated[
         Path | None,
         typer.Option(
             "--plugin-dir",
             "-p",
-            help="自定义插件安装目录（默认 ~/.gemini/config/plugins/ddnovel）",
+            help="自定义安装目录（antigravity 默认 ~/.gemini/config/plugins/ddnovel，codex/chatgpt 默认 ~/.codex）",
         ),
     ] = None,
     mcp_command: Annotated[
@@ -618,6 +660,14 @@ def host_install_cmd(
             "--mcp-command",
             "-m",
             help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--reader-dir",
+            "-R",
+            help="可选 DDNovelReader 仓库根目录；提供时一并写入 ddnovel-reader MCP 服务配置",
         ),
     ] = None,
     no_overwrite: Annotated[
@@ -630,26 +680,27 @@ def host_install_cmd(
         host=host,
         plugin_dir=plugin_dir,
         mcp_command=mcp_command,
+        reader_dir=reader_dir,
         no_overwrite=no_overwrite,
     )
 
 
 @host_app.command(
     "install-global",
-    epilog="示例: ddnovel host install-global antigravity",
+    epilog="示例: ddnovel host install-global antigravity  |  ddnovel host install-global codex",
 )
 @_cli_guard
 def host_install_global_cmd(
     host: Annotated[
         str,
-        typer.Argument(help="目标全局插件宿主类型（目前支持 antigravity）"),
+        typer.Argument(help="目标全局插件宿主类型（支持 antigravity / codex / chatgpt）"),
     ] = "antigravity",
     plugin_dir: Annotated[
         Path | None,
         typer.Option(
             "--plugin-dir",
             "-p",
-            help="自定义插件安装目录（默认 ~/.gemini/config/plugins/ddnovel）",
+            help="自定义安装目录（antigravity 默认 ~/.gemini/config/plugins/ddnovel，codex/chatgpt 默认 ~/.codex）",
         ),
     ] = None,
     mcp_command: Annotated[
@@ -658,6 +709,14 @@ def host_install_global_cmd(
             "--mcp-command",
             "-m",
             help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--reader-dir",
+            "-R",
+            help="可选 DDNovelReader 仓库根目录；提供时一并写入 ddnovel-reader MCP 服务配置",
         ),
     ] = None,
     no_overwrite: Annotated[
@@ -670,6 +729,7 @@ def host_install_global_cmd(
         host=host,
         plugin_dir=plugin_dir,
         mcp_command=mcp_command,
+        reader_dir=reader_dir,
         no_overwrite=no_overwrite,
     )
 
@@ -690,7 +750,7 @@ def host_sync_cmd(
         typer.Option(
             "--host",
             "-H",
-            help="要同步的宿主类型 (opencode | dsh | claude | antigravity)，省略则读取小说配置中的 hosts",
+            help="要同步的宿主类型 (opencode | dsh | claude | antigravity | codex | chatgpt)，省略则读取小说配置中的 hosts",
         ),
     ] = None,
     mcp_command: Annotated[
@@ -699,6 +759,14 @@ def host_sync_cmd(
             "--mcp-command",
             "-m",
             help="自定义 MCP Server 启动命令，可传入完整命令串或多次指定参数",
+        ),
+    ] = None,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--reader-dir",
+            "-R",
+            help="可选 DDNovelReader 仓库根目录；提供时一并写入 ddnovel-reader MCP 服务配置",
         ),
     ] = None,
     no_overwrite: Annotated[
@@ -718,7 +786,10 @@ def host_sync_cmd(
             "未指定 --host，且当前书库配置中也未记录 hosts；请至少传入一个宿主如 -H antigravity"
         )
 
-    initializer = ProjectInitializer(mcp_command=_parse_mcp_command_opt(mcp_command))
+    initializer = ProjectInitializer(
+        mcp_command=_parse_mcp_command_opt(mcp_command),
+        reader_dir=reader_dir,
+    )
     written = initializer.render_host_configs(
         bdir,
         hosts,
@@ -2349,6 +2420,83 @@ def chapter_promote_cmd(
     )
 
 
+@chapter_app.command(
+    "export",
+    epilog=(
+        "示例:\n"
+        "  ddnovel chapter export -d .                    # 将全部定稿合并导出到 04_创作/<书名>.txt\n"
+        "  ddnovel chapter export -d . -o ./全本.txt       # 指定导出路径\n"
+        "  ddnovel chapter export -d . -v vol_01          # 仅导出第 1 卷定稿\n"
+        "  ddnovel chapter export -d . --start 1 --end 10 # 仅导出第 1~10 章\n"
+        "  ddnovel chapter export -d . -n                 # 仅预览章节列表与输出路径，不写盘"
+    ),
+)
+@_cli_guard
+def chapter_export_cmd(
+    ctx: typer.Context,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="导出 TXT 文件路径（默认写入 04_创作/<书名>.txt）"),
+    ] = None,
+    volume_id: Annotated[
+        str | None,
+        typer.Option("--volume-id", "-v", help="仅导出指定分卷 ID（如 vol_01）"),
+    ] = None,
+    start: Annotated[
+        int | None,
+        typer.Option("--start", help="起始章号（含）"),
+    ] = None,
+    end: Annotated[
+        int | None,
+        typer.Option("--end", help="结束章号（含）"),
+    ] = None,
+    raw_markdown: Annotated[
+        bool,
+        typer.Option("--raw-markdown", help="保留 Markdown 标题前缀（默认剥离 # 以适配纯文本阅读）"),
+    ] = False,
+    no_title: Annotated[
+        bool,
+        typer.Option("--no-title", help="不在文件开头添加《书名》标题头"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", "-n", help="仅预览将合并的章节与输出路径，不执行写盘"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """将所有定稿正文按章序合并打包为单个 UTF-8 TXT 文件。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+    resolved_out = (
+        (output if output.is_absolute() else (Path.cwd() / output).resolve())
+        if output is not None
+        else None
+    )
+    with LifecycleManager(bdir) as lm:
+        res = lm.export_manuscript_txt(
+            output_path=resolved_out,
+            volume_id=volume_id,
+            start_chapter=start,
+            end_chapter=end,
+            include_book_title=not no_title,
+            strip_markdown=not raw_markdown,
+            dry_run=dry_run,
+        )
+
+    preview_list = "\n".join(f"  - {p}" for p in res.source_paths[:10])
+    if len(res.source_paths) > 10:
+        preview_list += f"\n  ... 另有 {len(res.source_paths) - 10} 章"
+    console.print(
+        Panel(
+            f"[bold green]导出状态:[/] {'预览模式 dry-run' if res.dry_run else '已合并导出'}\n"
+            f"[bold]输出文件:[/] [bold cyan]{res.output_path}[/]\n"
+            f"[bold]合并章节:[/] {res.chapter_count} 章 | [bold]总字数:[/] {res.total_chars:,} 字符\n"
+            f"[bold]源文件列表:[/]\n{preview_list}",
+            title="定稿打包导出 (chapter export)",
+            border_style="green",
+        )
+    )
+
+
 def _infer_volume_for_chapter(book_dir: Path, chapter: int) -> str:
     bp_root = resolve_blueprints_dir(book_dir)
     if bp_root.is_dir():
@@ -3448,6 +3596,489 @@ def audit_cmd(
     _render_audit_report(report)
     if not report.passed or (strict and len(report.issues) > 0):
         raise typer.Exit(code=1)
+
+
+@app.command(
+    "web",
+    epilog=(
+        "示例:\n"
+        "  ddnovel web -d .                              # 启动本地 Web UI 看板并自动打开浏览器\n"
+        "  ddnovel web -d . -p 9000 --no-open            # 指定端口启动服务但不自动弹窗\n"
+        "  ddnovel web -d . --export-html ./看板.html    # 导出单文件离线交互式 HTML 看板"
+    ),
+)
+@_cli_guard
+def web_cmd(
+    ctx: typer.Context,
+    host: Annotated[
+        str,
+        typer.Option("--host", "-H", help="Web 服务监听地址"),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="Web 服务监听端口（传 0 自动分配空闲端口）"),
+    ] = 8765,
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open/--no-open", help="启动后是否自动在默认浏览器中打开看板"),
+    ] = True,
+    export_html: Annotated[
+        Path | None,
+        typer.Option(
+            "--export-html",
+            "-o",
+            help="不启动常驻服务，直接导出单文件离线交互式 HTML 看板并退出",
+        ),
+    ] = None,
+    book_dir: BookDirOption = None,
+) -> None:
+    """启动本地 Web UI 可视化看板（或导出离线 HTML），查阅状态、悬线、人物与双时态关系网。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+
+    if export_html is not None:
+        out_path = export_html if export_html.is_absolute() else (Path.cwd() / export_html).resolve()
+        snap = build_dashboard_snapshot(bdir)
+        html = render_standalone_html(snap, live_server=False)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html, encoding="utf-8")
+        stats = snap["stats"]
+        console.print(
+            Panel(
+                f"[bold green]导出模式:[/] 单文件离线交互式 HTML 看板\n"
+                f"[bold]输出文件:[/] [bold cyan]{out_path}[/]\n"
+                f"[bold]书库标题:[/] 《{snap['book']['title']}》 (第 {stats['effective_chapter']} 章)\n"
+                f"[bold]数据摘要:[/] 角色 {stats['characters_total']} | "
+                f"势力 {stats['factions_total']} | "
+                f"关系 {stats['relations_total']} | "
+                f"悬线 {stats['threads_total']}",
+                title="Web UI 离线看板导出 (ddnovel web)",
+                border_style="green",
+            )
+        )
+        return
+
+    def _announce_ready(url: str) -> None:
+        console.print(
+            Panel(
+                f"[bold green]访问地址:[/] [bold cyan]{url}[/]\n"
+                f"[bold]目标书库:[/] {bdir}\n"
+                f"[dim]页面内点击「🔄 刷新数据」可实时读取最新文件状态；按 Ctrl+C 停止服务。[/]",
+                title="DDNovel Web UI 状态看板已启动",
+                border_style="green",
+            )
+        )
+
+    serve_web_ui(
+        bdir,
+        host=host,
+        port=port,
+        open_browser=open_browser,
+        on_ready=_announce_ready,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Group 12: DDNovelReader 作品包适配、单章资源规划与打包 (reader)
+# ---------------------------------------------------------------------------
+
+
+@reader_app.command(
+    "plan",
+    epilog=(
+        "示例:\n"
+        "  ddnovel reader plan 1 -d .              # 单独设计第 1 章并列出所需立绘/场景/CG 资源清单\n"
+        "  ddnovel reader plan 1 -d . --save       # 生成并保存设计方案 Markdown 至 04_创作/阅读器作品包/设计方案/\n"
+        "  ddnovel reader plan --all -d . --json   # 输出当前全部章节的结构化 JSON 资源清单"
+    ),
+)
+@_cli_guard
+def reader_plan_cmd(
+    ctx: typer.Context,
+    chapter: Annotated[
+        int | None,
+        typer.Argument(help="要单独设计的章号（省略时需指定 --all 规划全部章节）"),
+    ] = None,
+    all_chapters: Annotated[
+        bool,
+        typer.Option("--all", "-a", help="规划当前书库全部章节的伴读资源需求"),
+    ] = False,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="DDNovelReader 作品包输出目录（默认 04_创作/阅读器作品包/）"),
+    ] = None,
+    include_drafts: Annotated[
+        bool,
+        typer.Option("--include-drafts/--manuscript-only", help="当定稿尚未入库时是否允许读取草稿正文"),
+    ] = True,
+    save: Annotated[
+        bool,
+        typer.Option("--save", "-s", help="将伴读演出与资源需求清单写入 Markdown 设计文件"),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="以 JSON 格式输出结构化资源需求清单"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """为单章（或全书）分析并提出适配 DDNovelReader 的视觉资源需求清单（立绘/差分/场景/CG/头像/封面）。"""
+    if chapter is None and not all_chapters:
+        raise ValueError("请指定章号（如 ddnovel reader plan 1），或传入 --all 规划当前全部章节")
+
+    bdir = _resolve_book_dir(book_dir, ctx)
+    exporter = ReaderExporter(bdir)
+    if chapter is not None:
+        plan = exporter.plan_chapter_resources(
+            chapter,
+            output_dir=output_dir,
+            include_drafts=include_drafts,
+            save_plan=save,
+        )
+        if as_json:
+            typer.echo(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2))
+            return
+
+        payload = plan.to_dict()
+        counts = payload["counts"]
+        console.print(
+            Panel(
+                f"[bold cyan]{plan.title}[/] (`{plan.chapter_id}` / {plan.volume_id})\n"
+                f"[bold]正文来源:[/] {plan.source_text_path} ({plan.word_count:,} 字)\n"
+                f"[bold]资源统计:[/] 共 {counts['total']} 项 | "
+                f"[green]已有可复用 {counts['ready']}[/] | "
+                f"[yellow]已有基础待绘差分 {counts['reuse_base']}[/] | "
+                f"[red]缺失待绘 {counts['missing']}[/]"
+                + (f"\n[bold]已保存方案:[/] {plan.saved_plan_path}" if plan.saved_plan_path else ""),
+                title="DDNovelReader 单章伴读设计与资源需求提案 (reader plan)",
+                border_style="cyan",
+            )
+        )
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("类别", no_wrap=True)
+        table.add_column("资源名称", style="bold")
+        table.add_column("目标路径", style="dim")
+        table.add_column("状态", no_wrap=True)
+        table.add_column("推荐规格")
+        table.add_column("建议技能", no_wrap=True)
+        status_map = {
+            "ready": "[green]已有[/]",
+            "reuse_base": "[yellow]待差分[/]",
+            "missing": "[red]缺失[/]",
+        }
+        for req in plan.resources:
+            table.add_row(
+                req.category,
+                req.title,
+                req.asset_path,
+                status_map.get(req.status, req.status),
+                req.recommended_size,
+                req.recommended_skill or "-",
+            )
+        console.print(table)
+        return
+
+    plans = exporter.plan_book_resources(
+        output_dir=output_dir,
+        include_drafts=include_drafts,
+        save_plan=save,
+    )
+    if as_json:
+        typer.echo(json.dumps([p.to_dict() for p in plans], ensure_ascii=False, indent=2))
+        return
+
+    table = Table(title=f"全书伴读资源需求总览（共 {len(plans)} 章）", show_header=True, header_style="bold cyan")
+    table.add_column("章号", justify="right")
+    table.add_column("章节标题", style="bold")
+    table.add_column("总资源数", justify="right")
+    table.add_column("已有", justify="right", style="green")
+    table.add_column("待差分", justify="right", style="yellow")
+    table.add_column("缺失", justify="right", style="red")
+    for p in plans:
+        c = p.to_dict()["counts"]
+        table.add_row(
+            str(p.chapter),
+            p.title,
+            str(c["total"]),
+            str(c["ready"]),
+            str(c["reuse_base"]),
+            str(c["missing"]),
+        )
+    console.print(table)
+
+
+@reader_app.command(
+    "export",
+    epilog=(
+        "示例:\n"
+        "  ddnovel reader export -d .                                    # 导出当前全部定稿并打包 .ddbook\n"
+        "  ddnovel reader export -d . --include-drafts                   # 包含草稿一并导出当前全部章节\n"
+        "  ddnovel reader export -d . -c 1 --no-pack                     # 单独导出/更新第 1 章到源目录供热重载预览\n"
+        "  ddnovel reader export -d . -c 2 --patch-from ./old.ddbook     # 增量更新第 2 章并生成 .ddpatch 补丁"
+    ),
+)
+@_cli_guard
+def reader_export_cmd(
+    ctx: typer.Context,
+    chapter: Annotated[
+        int | None,
+        typer.Option("--chapter", "-c", help="仅导出/增量更新指定单章（省略则导出当前全书）"),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="作品包输出目录（默认 04_创作/阅读器作品包/）"),
+    ] = None,
+    include_drafts: Annotated[
+        bool,
+        typer.Option("--include-drafts", help="当定稿缺失时自动回退读取草稿正文"),
+    ] = False,
+    pack: Annotated[
+        bool,
+        typer.Option("--pack/--no-pack", help="导出后是否自动封装合规 ZIP Store .ddbook 作品包"),
+    ] = True,
+    placeholders: Annotated[
+        bool,
+        typer.Option("--placeholders/--no-placeholders", help="是否为缺失的 .png 素材自动生成合法 RGBA 占位图"),
+    ] = True,
+    patch_from: Annotated[
+        Path | None,
+        typer.Option("--patch-from", help="传入旧版源目录或 .ddbook，同时生成增量补丁 .ddpatch"),
+    ] = None,
+    book_id: Annotated[
+        str | None,
+        typer.Option("--book-id", help="自定义 DDNovelReader book_id（默认按书名生成安全 ASCII ID）"),
+    ] = None,
+    revision: Annotated[
+        int | None,
+        typer.Option("--revision", help="指定 manifest.revision 版本号"),
+    ] = None,
+    accent_color: Annotated[
+        str,
+        typer.Option("--accent-color", help="作品 HUD 主题强调色 Hex（默认 #6CE5E8）"),
+    ] = "#6CE5E8",
+    volume_id: Annotated[
+        str | None,
+        typer.Option("--volume-id", "-v", help="全书模式下仅导出指定分卷（如 vol_01）"),
+    ] = None,
+    start: Annotated[
+        int | None,
+        typer.Option("--start", help="全书模式下起始章号（含）"),
+    ] = None,
+    end: Annotated[
+        int | None,
+        typer.Option("--end", help="全书模式下结束章号（含）"),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="是否启用严格模式（将 warning 视为阻断）"),
+    ] = True,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option("--reader-dir", "-R", help="指定本机 DDNovelReader 仓库根目录（用于调用 ddnovel_tool.py）"),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="输出结构化 JSON 结果"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """将当前全书或单独一章导出为适配 DDNovelReader 的源目录、`.ddbook` 与 `.ddpatch`。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+    exporter = ReaderExporter(bdir)
+    if chapter is not None:
+        res = exporter.export_chapter(
+            chapter,
+            output_dir=output_dir,
+            include_drafts=True if not include_drafts else include_drafts,
+            pack_ddbook=pack,
+            patch_from=patch_from,
+            generate_placeholders=placeholders,
+            strict_validate=strict,
+            reader_dir=reader_dir,
+            book_id=book_id,
+            accent_color=accent_color,
+        )
+    else:
+        res = exporter.export_book(
+            output_dir=output_dir,
+            include_drafts=include_drafts,
+            pack_ddbook=pack,
+            patch_from=patch_from,
+            generate_placeholders=placeholders,
+            strict_validate=strict,
+            reader_dir=reader_dir,
+            book_id=book_id,
+            revision=revision,
+            accent_color=accent_color,
+            volume_id=volume_id,
+            start_chapter=start,
+            end_chapter=end,
+        )
+
+    if as_json:
+        typer.echo(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+        return
+
+    val = res.validation or {}
+    val_ok = bool(val.get("ok", False))
+    lines = [
+        f"[bold]导出模式:[/] {'单章增量' if res.mode == 'chapter' else '全书打包'} | "
+        f"[bold]book_id:[/] [cyan]{res.book_id}[/] (rev {res.revision})",
+        f"[bold]导出章节:[/] {', '.join(str(c) for c in res.exported_chapters)}（共 {len(res.exported_chapters)} 章）",
+        f"[bold]源目录（可热重载挂载）:[/] [bold cyan]{res.source_dir}[/]",
+        f"[bold]素材统计:[/] 真实复用 {len(res.copied_assets)} | 自动占位图 {len(res.generated_placeholders)} | "
+        f"待补绘 {len(res.missing_resources)}",
+        f"[bold]协议校验:[/] {'[green]PASSED[/]' if val_ok else '[red]FAILED[/]'} "
+        f"({res.reader_tool_used}: errors={val.get('errors', 0)}, warnings={val.get('warnings', 0)})",
+    ]
+    if res.ddbook_path:
+        lines.append(f"[bold]已打包 .ddbook:[/] [bold green]{res.ddbook_path}[/]")
+    if res.ddpatch_path:
+        lines.append(f"[bold]已打包 .ddpatch:[/] [bold green]{res.ddpatch_path}[/]")
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="DDNovelReader 作品包导出完成 (reader export)",
+            border_style="green" if val_ok else "yellow",
+        )
+    )
+
+
+@reader_app.command(
+    "validate",
+    epilog="示例: ddnovel reader validate ./04_创作/阅读器作品包/source --strict",
+)
+@_cli_guard
+def reader_validate_cmd(
+    ctx: typer.Context,
+    target: Annotated[
+        Path | None,
+        typer.Argument(help="待校验的源目录、.ddbook、.ddpatch 或 JSON（省略默认检查 04_创作/阅读器作品包/source）"),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="严格模式：存在 warning 即返回非零退出码"),
+    ] = True,
+    target_type: Annotated[
+        str | None,
+        typer.Option("--type", help="强制指定目标类型 (book_dir|ddbook|ddpatch|manifest|chapter|gallery|codex|patch)"),
+    ] = None,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option("--reader-dir", "-R", help="指定本机 DDNovelReader 仓库根目录"),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="输出结构化 JSON 校验报告"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """调用 DDNovelReader Protocol v1.0 校验器体检作品源目录或 `.ddbook` / `.ddpatch`。"""
+    if target is None:
+        bdir = _resolve_book_dir(book_dir, ctx)
+        resolved_target = resolve_reader_pack_dir(bdir) / "source"
+    else:
+        resolved_target = target.resolve()
+
+    report = validate_reader_target(
+        resolved_target,
+        strict=strict,
+        target_type=target_type,
+        reader_dir=reader_dir,
+    )
+    if as_json:
+        typer.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        console.print(
+            Panel(
+                f"[bold]目标:[/] {report.target} (`{report.target_kind}`)\n"
+                f"[bold]校验器:[/] {report.tool}\n"
+                f"[bold]结论:[/] {'[green]PASSED[/]' if report.ok else '[red]FAILED[/]'} "
+                f"(errors={report.errors}, warnings={report.warnings}, infos={report.infos})",
+                title="DDNovelReader 协议校验报告 (reader validate)",
+                border_style="green" if report.ok else "red",
+            )
+        )
+        if report.diagnostics:
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("级别", no_wrap=True)
+            table.add_column("Code", style="cyan", no_wrap=True)
+            table.add_column("文件/路径", style="dim")
+            table.add_column("说明")
+            for d in report.diagnostics[:30]:
+                loc = f"{d.get('file', '')}:{d.get('path', '')}".strip(":")
+                table.add_row(str(d.get("severity", "")), str(d.get("code", "")), loc, str(d.get("message", "")))
+            console.print(table)
+
+    if not report.ok:
+        raise typer.Exit(code=1 if report.errors > 0 else 2)
+
+
+@reader_app.command(
+    "pack",
+    epilog=(
+        "示例:\n"
+        "  ddnovel reader pack ./source -o ./my_book.ddbook\n"
+        "  ddnovel reader pack ./source --patch-from ./old.ddbook -o ./v2.ddpatch"
+    ),
+)
+@_cli_guard
+def reader_pack_cmd(
+    ctx: typer.Context,
+    source_dir: Annotated[
+        Path | None,
+        typer.Argument(help="作品源目录（省略默认 04_创作/阅读器作品包/source）"),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="输出 .ddbook 或 .ddpatch 文件路径"),
+    ] = None,
+    patch_from: Annotated[
+        Path | None,
+        typer.Option("--patch-from", help="传入旧版源目录或 .ddbook，改为生成增量 .ddpatch"),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict/--no-strict", help="打包前是否执行严格预校验"),
+    ] = True,
+    reader_dir: Annotated[
+        Path | None,
+        typer.Option("--reader-dir", "-R", help="指定本机 DDNovelReader 仓库根目录"),
+    ] = None,
+    book_dir: BookDirOption = None,
+) -> None:
+    """将 DDNovelReader 源目录封装为合规 ZIP Store `.ddbook` 或增量 `.ddpatch`。"""
+    bdir = _resolve_book_dir(book_dir, ctx) if source_dir is None else None
+    default_root = resolve_reader_pack_dir(bdir) if bdir is not None else Path.cwd()
+    src = source_dir.resolve() if source_dir is not None else (default_root / "source")
+
+    if patch_from is not None:
+        out_path = output.resolve() if output is not None else (src.parent / f"{src.parent.name}.ddpatch")
+        packed, val = build_reader_patch(
+            patch_from,
+            src,
+            out_path,
+            auto_bump_revision=True,
+            strict=strict,
+            reader_dir=reader_dir,
+        )
+        kind = ".ddpatch"
+    else:
+        out_path = output.resolve() if output is not None else (src.parent / f"{src.parent.name}.ddbook")
+        packed, val = pack_reader_book(
+            src,
+            out_path,
+            strict=strict,
+            reader_dir=reader_dir,
+        )
+        kind = ".ddbook"
+
+    console.print(
+        Panel(
+            f"[bold green]已成功封装 {kind}:[/] [bold cyan]{packed.as_posix()}[/]\n"
+            f"[bold]校验器:[/] {val.tool if val else '-'} (errors={val.errors if val else 0}, warnings={val.warnings if val else 0})",
+            title="DDNovelReader 容器打包完成 (reader pack)",
+            border_style="green",
+        )
+    )
 
 
 def main() -> None:

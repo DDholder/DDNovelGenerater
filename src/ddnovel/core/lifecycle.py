@@ -17,6 +17,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Self
 
@@ -52,6 +53,7 @@ from .paths import (
     resolve_threads_file,
     resolve_volumes_dir,
     resolve_world_state_file,
+    sanitize_filename_label,
 )
 from .schemas import (
     VOLUME_ID_PATTERN,
@@ -171,6 +173,30 @@ def _make_excerpt(text: str, start: int, end: int, *, radius: int = 60) -> str:
     if right < len(text):
         snippet = f"{snippet}..."
     return snippet
+
+
+@dataclass(frozen=True)
+class ExportTxtResult:
+    """将所有定稿正文合并导出为单个 TXT 文件的结果。"""
+
+    output_path: str
+    chapter_count: int
+    chapters: list[int]
+    source_paths: list[str]
+    total_chars: int
+    dry_run: bool = False
+
+
+def _format_chapter_for_txt(
+    body: str,
+    *,
+    strip_markdown: bool,
+) -> str:
+    """规范化单章正文换行并按需剥离 Markdown 标题前缀。"""
+    text = body.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if strip_markdown and text:
+        text = re.sub(r"^[ \t]*#{1,6}[ \t]+", "", text, flags=re.MULTILINE)
+    return text.strip()
 
 
 class LifecycleManager:
@@ -2224,6 +2250,107 @@ class LifecycleManager:
             parts.append(bp.body)
         return "\n".join(parts)
 
+    def export_manuscript_txt(
+        self,
+        *,
+        output_path: Path | str | None = None,
+        volume_id: str | None = None,
+        start_chapter: int | None = None,
+        end_chapter: int | None = None,
+        include_book_title: bool = True,
+        strip_markdown: bool = True,
+        dry_run: bool = False,
+    ) -> ExportTxtResult:
+        """将定稿目录中的所有正文按章序合并打包为单个 UTF-8 TXT 文件。"""
+        if volume_id is not None:
+            volume_id = _VOLUME_ID_ADAPTER.validate_python(volume_id)
+        if start_chapter is not None:
+            start_chapter = _validate_non_bool_int(start_chapter, name="start_chapter", min_value=1)
+        if end_chapter is not None:
+            end_chapter = _validate_non_bool_int(end_chapter, name="end_chapter", min_value=1)
+        if start_chapter is not None and end_chapter is not None and start_chapter > end_chapter:
+            raise ValueError(
+                f"start_chapter ({start_chapter}) 不能大于 end_chapter ({end_chapter})"
+            )
+
+        manuscript_dir = resolve_manuscript_dir(self._book_dir)
+        if not manuscript_dir.is_dir():
+            raise FileNotFoundError(f"未找到定稿目录: {manuscript_dir}")
+
+        candidates: list[tuple[tuple[int, int, str], int | None, Path, str]] = []
+        for md_path in sorted(manuscript_dir.rglob("*.md")):
+            if not md_path.is_file():
+                continue
+            if md_path.name.lower() == "readme.md":
+                continue
+            if volume_id is not None:
+                if md_path.parent == manuscript_dir:
+                    continue
+                if infer_volume_id_from_stem(md_path.parent.name) != volume_id:
+                    continue
+
+            raw_text = md_path.read_text(encoding="utf-8", errors="replace")
+            fm_dict, body = split_frontmatter(raw_text)
+
+            ch_num: int | None = None
+            raw_ch = fm_dict.get("chapter")
+            if isinstance(raw_ch, int) and not isinstance(raw_ch, bool) and raw_ch >= 1:
+                ch_num = raw_ch
+            elif isinstance(raw_ch, str) and raw_ch.strip().isdigit() and int(raw_ch.strip()) >= 1:
+                ch_num = int(raw_ch.strip())
+            if ch_num is None:
+                ch_num = _extract_chapter_from_path(md_path, body)
+
+            if start_chapter is not None and (ch_num is None or ch_num < start_chapter):
+                continue
+            if end_chapter is not None and (ch_num is None or ch_num > end_chapter):
+                continue
+
+            formatted_body = _format_chapter_for_txt(body, strip_markdown=strip_markdown)
+            if not formatted_body:
+                continue
+
+            rel_posix = self._rel_posix(md_path)
+            sort_key = (0, ch_num, rel_posix) if ch_num is not None else (1, 0, rel_posix)
+            candidates.append((sort_key, ch_num, md_path, formatted_body))
+
+        if not candidates:
+            raise FileNotFoundError(f"在定稿目录 {manuscript_dir} 中未找到符合条件的定稿章节")
+
+        candidates.sort(key=lambda item: item[0])
+
+        chunks: list[str] = []
+        if include_book_title:
+            book_title = (self._config.title or "").strip()
+            if book_title:
+                author = str(getattr(self._config, "author", "") or "").strip()
+                header = f"《{book_title}》\n作者：{author}" if author else f"《{book_title}》"
+                chunks.append(header)
+
+        chunks.extend(item[3] for item in candidates)
+        merged_text = "\n\n\n".join(chunks) + "\n"
+
+        if output_path is None:
+            safe_title = sanitize_filename_label(self._config.title or "") or "manuscript_export"
+            suffix = f"_{volume_id}" if volume_id is not None else ""
+            out_path = manuscript_dir.parent / f"{safe_title}{suffix}.txt"
+        else:
+            raw_out = Path(output_path)
+            out_path = raw_out if raw_out.is_absolute() else (self._book_dir / raw_out)
+
+        if not dry_run:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(merged_text, encoding="utf-8")
+
+        return ExportTxtResult(
+            output_path=self._rel_posix(out_path),
+            chapter_count=len(candidates),
+            chapters=[item[1] for item in candidates if item[1] is not None],
+            source_paths=[self._rel_posix(item[2]) for item in candidates],
+            total_chars=len(merged_text),
+            dry_run=dry_run,
+        )
+
     @staticmethod
     def _load_character_state_file(path: Path) -> CharacterStateFile:
         if not path.is_file():
@@ -2261,4 +2388,4 @@ class LifecycleManager:
         return ThreadsFile.model_validate(raw)
 
 
-__all__ = ["LifecycleManager"]
+__all__ = ["ExportTxtResult", "LifecycleManager"]

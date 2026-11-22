@@ -63,6 +63,7 @@ def test_cli_version_and_help() -> None:
         "thread",
         "history",
         "audit",
+        "web",
     ):
         assert cmd_name in help_res.output
 
@@ -801,3 +802,30 @@ def test_cli_setting_lint_and_upsert_abstraction_warnings(tmp_path: Path) -> Non
     assert all_lint.exit_code == 0, all_lint.output
     assert "char_suyue" in all_lint.output
     assert "char_old_npc" in all_lint.output
+
+
+def test_cli_chapter_export_bundles_manuscripts_into_txt(tmp_path: Path) -> None:
+    book_dir = _init_sample_book(tmp_path / "book_export")
+    ms_v1 = book_dir / "04_创作" / "定稿" / "第01卷"
+    ms_v1.mkdir(parents=True, exist_ok=True)
+    (ms_v1 / "第0001章-初遇.md").write_text("# 第 1 章 初遇\n\n第一段。\n", encoding="utf-8")
+    (ms_v1 / "第0002章-再会.md").write_text("# 第 2 章 再会\n\n第二段。\n", encoding="utf-8")
+
+    out_txt = tmp_path / "exported_novel.txt"
+    dry_res = runner.invoke(
+        app,
+        ["chapter", "export", "-d", str(book_dir), "-o", str(out_txt), "-n"],
+    )
+    assert dry_res.exit_code == 0, dry_res.output
+    assert not out_txt.exists()
+
+    res = runner.invoke(
+        app,
+        ["chapter", "export", "-d", str(book_dir), "-o", str(out_txt)],
+    )
+    assert res.exit_code == 0, res.output
+    assert out_txt.is_file()
+    txt = out_txt.read_text(encoding="utf-8")
+    assert "第 1 章 初遇" in txt
+    assert "第 2 章 再会" in txt
+    assert txt.index("第 1 章 初遇") < txt.index("第 2 章 再会")

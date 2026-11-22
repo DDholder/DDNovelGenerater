@@ -40,6 +40,29 @@ Codex Desktop、ChatGPT Desktop（Codex / Work 本地模式）与 Codex CLI 共�
   uv run ddnovel host sync -d <book_dir> -H chatgpt
   ```
 
+### DDNovelReader 伴读作品包支持（`.ddbook` / `.ddpatch`）
+
+支持直接适配 [DDNovelReader](../DDNovelReader)（复用其 `ddnovel-reader` MCP 与 `tools/ddnovel_tool.py` 严格校验器）：
+
+- **单章伴读设计与视觉资源需求提案**（列出所需角色立绘/表情差分、微徽章头像、场景背景、典藏剧情 CG 与已有/缺失状态）：
+  ```bash
+  uv run ddnovel reader plan 1 -d <book_dir> --save
+  ```
+- **导出当前全书并封装 `.ddbook`**（自动合并定稿/草稿、防剧透时空百科、已有插画并生成缺失占位图）：
+  ```bash
+  uv run ddnovel reader export -d <book_dir> --reader-dir D:/work/AI/proj/DDNovelReader
+  ```
+- **单独导出/增量更新一章**（保留其他章节，并支持生成 `.ddpatch` 增量补丁）：
+  ```bash
+  uv run ddnovel reader export -d <book_dir> -c 1 --no-pack
+  uv run ddnovel reader export -d <book_dir> -c 2 --patch-from ./old.ddbook
+  ```
+- **一键为 AI 宿主同时接入 `ddnovel` 与 `ddnovel-reader` 双 MCP**：
+  ```bash
+  uv run ddnovel host install antigravity --reader-dir D:/work/AI/proj/DDNovelReader
+  uv run ddnovel host install codex --reader-dir D:/work/AI/proj/DDNovelReader
+  ```
+
 可选向量检索插件：`uv sync --extra vector`
 
 ## 文档

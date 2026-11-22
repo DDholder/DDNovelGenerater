@@ -1,0 +1,2171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DDNovel 状态与关系看板</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-alt: #f8fafc;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --text-subtle: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+    --accent-text: #1d4ed8;
+    --success: #059669;
+    --success-soft: #ecfdf5;
+    --warning: #d97706;
+    --warning-soft: #fffbeb;
+    --danger: #dc2626;
+    --danger-soft: #fef2f2;
+    --purple: #7c3aed;
+    --purple-soft: #f5f3ff;
+    --cyan: #0891b2;
+    --cyan-soft: #ecfeff;
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14);
+    --radius: 10px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0b1120;
+    --surface: #111827;
+    --surface-alt: #1e293b;
+    --border: #1f2937;
+    --border-strong: #334155;
+    --text: #f1f5f9;
+    --text-muted: #cbd5e1;
+    --text-subtle: #94a3b8;
+    --accent: #60a5fa;
+    --accent-soft: rgba(59, 130, 246, 0.16);
+    --accent-text: #93c5fd;
+    --success: #34d399;
+    --success-soft: rgba(16, 185, 129, 0.15);
+    --warning: #fbbf24;
+    --warning-soft: rgba(245, 158, 11, 0.16);
+    --danger: #f87171;
+    --danger-soft: rgba(239, 68, 68, 0.16);
+    --purple: #a78bfa;
+    --purple-soft: rgba(139, 92, 246, 0.18);
+    --cyan: #22d3ee;
+    --cyan-soft: rgba(6, 182, 212, 0.16);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    font-size: 14px;
+  }
+
+  /* Header */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .topbar-inner {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .book-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0;
+  }
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .quick-search-wrap {
+    position: relative;
+    min-width: 220px;
+  }
+  .quick-search-results {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 60;
+    display: none;
+  }
+  .quick-search-results.open { display: block; }
+  .quick-search-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .quick-search-item:last-child { border-bottom: none; }
+  .quick-search-item:hover { background: var(--accent-soft); }
+
+  /* Tabs */
+  .tabs-bar {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    border-top: 1px solid var(--border);
+  }
+  .tab-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent-text);
+    border-bottom-color: var(--accent);
+  }
+  .tab-count {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text-subtle);
+  }
+  .tab-btn.active .tab-count {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent-text);
+  }
+
+  /* Layout */
+  .container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 18px 20px 48px;
+  }
+  .view-panel { display: none; }
+  .view-panel.active { display: block; }
+
+  /* Controls & Inputs */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn:hover { background: var(--surface-alt); border-color: var(--accent); }
+  .btn.active-toggle {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  .btn-sm { padding: 4px 9px; font-size: 12px; border-radius: 6px; }
+  .input, .select {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .input:focus, .select:focus { border-color: var(--accent); }
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pill-switch {
+    display: inline-flex;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .pill-opt {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .pill-opt.active {
+    background: var(--surface);
+    color: var(--accent-text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Badges & Entity Chips */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .badge-neutral { background: var(--surface-alt); border-color: var(--border); color: var(--text-muted); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent-text); }
+  .badge-success { background: var(--success-soft); color: var(--success); }
+  .badge-warning { background: var(--warning-soft); color: var(--warning); }
+  .badge-danger { background: var(--danger-soft); color: var(--danger); }
+  .badge-purple { background: var(--purple-soft); color: var(--purple); }
+  .badge-cyan { background: var(--cyan-soft); color: var(--cyan); }
+  .mono { font-family: var(--mono); font-size: 12px; }
+
+  .entity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+    margin: 2px 4px 2px 0;
+  }
+  .entity-chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .entity-chip.cat-faction { background: var(--purple-soft); color: var(--purple); }
+  .entity-chip.cat-geography { background: var(--success-soft); color: var(--success); }
+  .entity-chip.cat-item { background: var(--warning-soft); color: var(--warning); }
+  .entity-chip.cat-world, .entity-chip.cat-rule { background: var(--cyan-soft); color: var(--cyan); }
+  .entity-chip.missing-card { border-style: dashed; border-color: var(--border-strong); opacity: 0.88; }
+
+  /* Cards & Grids */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .kpi-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .kpi-label { font-size: 12px; color: var(--text-subtle); margin-bottom: 4px; }
+  .kpi-value { font-size: 24px; font-weight: 700; line-height: 1.2; }
+  .kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 14px;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .two-col { grid-template-columns: 1fr; }
+    .cards-grid { grid-template-columns: 1fr; }
+  }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 10px 0 4px;
+  }
+  .text-block {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+  }
+  .bullet-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+  }
+  .bullet-list li { margin-bottom: 3px; }
+
+  /* Extra KV renderer */
+  .kv-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .kv-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px;
+    font-size: 13px;
+    padding: 5px 8px;
+    background: var(--surface-alt);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .kv-key {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-subtle);
+    word-break: break-all;
+  }
+  .kv-val { word-break: break-word; }
+
+  /* Spoiler / Secret masking */
+  .secret-box {
+    background: var(--danger-soft);
+    border: 1px dashed var(--danger);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .secret-masked {
+    filter: blur(5px);
+    user-select: none;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .secret-masked:hover { filter: blur(3px); }
+  .secret-hint {
+    font-size: 11px;
+    color: var(--danger);
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Epistemic Bounds */
+  .epistemic-box {
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-alt);
+  }
+  .epistemic-box summary {
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .epistemic-inner {
+    padding: 4px 10px 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Graph Panel */
+  .graph-shell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .graph-stage {
+    position: relative;
+    height: 540px;
+    background: radial-gradient(circle at 50% 50%, var(--surface-alt) 0%, var(--surface) 100%);
+    user-select: none;
+  }
+  .graph-stage svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+  .graph-stage svg:active { cursor: grabbing; }
+  .graph-legend {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    opacity: 0.94;
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .graph-node-inspector {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 300px;
+    max-height: 460px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: var(--shadow-lg);
+    display: none;
+  }
+  .graph-node-inspector.open { display: block; }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr.row-inactive { opacity: 0.68; }
+
+  /* Drawer */
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 90;
+    display: none;
+  }
+  .drawer-backdrop.open { display: block; }
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: min(560px, 95vw);
+    height: 100vh;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    transition: right 0.2s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer.open { right: 0; }
+  .drawer-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .drawer-body {
+    padding: 16px 20px 36px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* Warnings & Toast */
+  .warning-banner {
+    background: var(--warning-soft);
+    border: 1px solid var(--warning);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--text);
+    color: var(--surface);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 120;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 0.95; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-subtle);
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1 class="book-title" id="book-title">DDNovel 状态看板</h1>
+      <span class="badge badge-accent" id="book-genre"></span>
+      <span class="badge badge-success" id="book-progress"></span>
+      <span class="badge badge-neutral" id="book-time"></span>
+    </div>
+    <div class="topbar-actions">
+      <div class="quick-search-wrap">
+        <input type="search" id="global-search" class="input" style="width:100%" placeholder="🔍 全局搜索人物/势力/实体..." autocomplete="off" />
+        <div id="global-search-results" class="quick-search-results"></div>
+      </div>
+      <button type="button" class="btn" id="btn-toggle-secrets" title="控制是否显示幕后真相与 [机密] 设定">👁 机密：隐藏</button>
+      <button type="button" class="btn" id="btn-toggle-theme">🌗 切换主题</button>
+      <button type="button" class="btn" id="btn-refresh">🔄 刷新数据</button>
+    </div>
+  </div>
+  <nav class="tabs-bar" id="tabs-bar">
+    <button type="button" class="tab-btn active" data-tab="overview">📊 全局总览</button>
+    <button type="button" class="tab-btn" data-tab="characters">👤 人物状态 <span class="tab-count" id="cnt-characters">0</span></button>
+    <button type="button" class="tab-btn" data-tab="relations">🕸️ 人物关系网 <span class="tab-count" id="cnt-relations">0</span></button>
+    <button type="button" class="tab-btn" data-tab="threads">🧵 悬线与伏笔 <span class="tab-count" id="cnt-threads">0</span></button>
+    <button type="button" class="tab-btn" data-tab="factions">🏛️ 势力状态 <span class="tab-count" id="cnt-factions">0</span></button>
+    <button type="button" class="tab-btn" data-tab="history">📜 历史与设定集 <span class="tab-count" id="cnt-history">0</span></button>
+  </nav>
+</header>
+
+<main class="container">
+  <div id="warnings-container"></div>
+
+  <!-- Tab 1: Overview -->
+  <section id="panel-overview" class="view-panel active">
+    <div class="kpi-grid" id="overview-kpis"></div>
+    <div class="card" style="margin-bottom: 16px;" id="overview-world-card"></div>
+    <div class="two-col">
+      <div class="card" id="overview-radar-card"></div>
+      <div class="card" id="overview-recent-history"></div>
+    </div>
+  </section>
+
+  <!-- Tab 2: Characters -->
+  <section id="panel-characters" class="view-panel">
+    <div class="filter-bar">
+      <input type="search" id="char-search" class="input" style="min-width:240px" placeholder="搜索姓名、ID、别名、身心状态或目标..." />
+      <div class="pill-switch" id="char-status-pills">
+        <button type="button" class="pill-opt active" data-val="active">当前活跃</button>
+        <button type="button" class="pill-opt" data-val="archived">冷库归档</button>
+        <button type="button" class="pill-opt" data-val="no_state">仅静态设定</button>
+        <button type="button" class="pill-opt" data-val="all">全部</button>
+      </div>
+      <select id="char-loc-filter" class="select">
+        <option value="">全部所在地</option>
+      </select>
+      <span class="badge badge-neutral" id="char-filter-count"></span>
+    </div>
+    <div id="characters-grid" class="cards-grid"></div>
+  </section>
+
+  <!-- Tab 3: Relations Graph & Table -->
+  <section id="panel-relations" class="view-panel">
+    <div class="filter-bar">
+      <div class="pill-switch" id="rel-mode-pills">
+        <button type="button" class="pill-opt active" data-val="at_chapter">按章号生效关系</button>
+        <button type="button" class="pill-opt" data-val="all">全部历史关系（含失效/归档）</button>
+      </div>
+      <div class="filter-group" id="rel-chapter-controls">
+        <span style="font-size:12px;color:var(--text-muted)">时间轴章号:</span>
+        <button type="button" class="btn btn-sm" id="rel-ch-prev">◀</button>
+        <input type="range" id="rel-ch-slider" min="1" max="1" value="1" style="width:160px" />
+        <button type="button" class="btn btn-sm" id="rel-ch-next">▶</button>
+        <span class="badge badge-accent" id="rel-ch-label">第 1 章</span>
+      </div>
+      <select id="rel-entity-filter" class="select">
+        <option value="">全部关联实体</option>
+      </select>
+      <input type="search" id="rel-search" class="input" placeholder="过滤关系描述或实体..." />
+      <button type="button" class="btn btn-sm" id="rel-reset-view">🎯 重置视角</button>
+      <button type="button" class="btn btn-sm" id="rel-relayout">✨ 重新布局</button>
+    </div>
+
+    <div class="graph-shell">
+      <div class="graph-stage" id="graph-stage">
+        <svg id="rel-svg" viewBox="0 0 1000 540">
+          <defs>
+            <marker id="arrow-valid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+            </marker>
+            <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#2563eb" />
+            </marker>
+            <marker id="arrow-invalid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#94a3b8" />
+            </marker>
+          </defs>
+          <g id="graph-viewport"></g>
+        </svg>
+        <div class="graph-legend">
+          <span><i class="legend-dot" style="background:#3b82f6"></i>人物</span>
+          <span><i class="legend-dot" style="background:#8b5cf6"></i>势力</span>
+          <span><i class="legend-dot" style="background:#10b981"></i>地理</span>
+          <span><i class="legend-dot" style="background:#f59e0b"></i>器物/其他</span>
+          <span style="color:var(--text-subtle)">滚轮缩放 · 拖拽节点/画布 · 单击高亮 · 双击查档案</span>
+        </div>
+        <div class="graph-node-inspector" id="graph-node-inspector"></div>
+      </div>
+    </div>
+
+    <div class="table-wrap" id="relations-table-wrap"></div>
+  </section>
+
+  <!-- Tab 4: Threads -->
+  <section id="panel-threads" class="view-panel">
+    <div class="filter-bar">
+      <div class="pill-switch" id="thread-status-pills">
+        <button type="button" class="pill-opt active" data-val="open">全部未完结</button>
+        <button type="button" class="pill-opt" data-val="radar">⚡ 雷达预警</button>
+        <button type="button" class="pill-opt" data-val="active">推进中</button>
+        <button type="button" class="pill-opt" data-val="planted">已埋设</button>
+        <button type="button" class="pill-opt" data-val="dormant">潜伏</button>
+        <button type="button" class="pill-opt" data-val="resolved">已完结/归档</button>
+        <button type="button" class="pill-opt" data-val="all">全部</button>
+      </div>
+      <input type="search" id="thread-search" class="input" style="min-width:240px" placeholder="搜索悬线标题、线索、备注或实体..." />
+      <span class="badge badge-neutral" id="thread-filter-count"></span>
+    </div>
+    <div id="threads-grid" class="cards-grid"></div>
+  </section>
+
+  <!-- Tab 5: Factions -->
+  <section id="panel-factions" class="view-panel">
+    <div class="filter-bar">
+      <div class="pill-switch" id="fac-status-pills">
+        <button type="button" class="pill-opt active" data-val="active">当前活跃</button>
+        <button type="button" class="pill-opt" data-val="archived">归档/退场</button>
+        <button type="button" class="pill-opt" data-val="no_state">仅静态设定</button>
+        <button type="button" class="pill-opt" data-val="all">全部</button>
+      </div>
+      <input type="search" id="fac-search" class="input" style="min-width:240px" placeholder="搜索势力名称、ID、驻地、目标或备注..." />
+      <span class="badge badge-neutral" id="fac-filter-count"></span>
+    </div>
+    <div id="factions-grid" class="cards-grid"></div>
+  </section>
+
+  <!-- Tab 6: History & Settings -->
+  <section id="panel-history" class="view-panel">
+    <div class="filter-bar">
+      <div class="pill-switch" id="hist-subtab-pills">
+        <button type="button" class="pill-opt active" data-val="facts">章节历史事实流</button>
+        <button type="button" class="pill-opt" data-val="settings">设定集卡片浏览器</button>
+      </div>
+      <select id="hist-vol-filter" class="select">
+        <option value="">全部分卷</option>
+      </select>
+      <select id="setting-cat-filter" class="select" style="display:none">
+        <option value="">全部分类</option>
+        <option value="character">人物 (character)</option>
+        <option value="faction">势力 (faction)</option>
+        <option value="geography">地理 (geography)</option>
+        <option value="item">器物 (item)</option>
+        <option value="world">世界观 (world)</option>
+        <option value="rule">规则 (rule)</option>
+        <option value="other">其他 (other)</option>
+      </select>
+      <input type="search" id="hist-search" class="input" style="min-width:250px" placeholder="搜索章节摘要、原子事实或设定内容..." />
+      <span class="badge badge-neutral" id="hist-filter-count"></span>
+    </div>
+    <div id="history-content"></div>
+  </section>
+</main>
+
+<!-- Entity Inspector Drawer -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="entity-drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div>
+      <h2 class="card-title" id="drawer-title">实体档案</h2>
+      <div id="drawer-subtitle" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <button type="button" class="btn btn-sm" id="drawer-close">✕ 关闭</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script id="ddnovel-initial-data" type="application/json">null</script>
+<script>
+(function () {
+  "use strict";
+
+  const INITIAL_NODE = document.getElementById("ddnovel-initial-data");
+  let DATA = null;
+  try {
+    DATA = JSON.parse(INITIAL_NODE.textContent || "null");
+  } catch (err) {
+    DATA = null;
+  }
+
+  const state = {
+    activeTab: "overview",
+    showSecrets: false,
+    revealedIds: new Set(),
+    charStatus: "active",
+    charSearch: "",
+    charLoc: "",
+    relMode: "at_chapter",
+    relChapter: 1,
+    relEntity: "",
+    relSearch: "",
+    selectedNodeId: null,
+    threadStatus: "open",
+    threadSearch: "",
+    facStatus: "active",
+    facSearch: "",
+    histSubtab: "facts",
+    histVol: "",
+    settingCat: "",
+    histSearch: "",
+    graphTransform: { x: 0, y: 0, k: 1 },
+    graphPositions: new Map(),
+  };
+
+  const CAT_LABELS = {
+    character: "人物",
+    faction: "势力",
+    geography: "地理",
+    item: "器物",
+    world: "世界观",
+    rule: "规则",
+    other: "其他",
+  };
+
+  const CAT_COLORS = {
+    character: "#3b82f6",
+    faction: "#8b5cf6",
+    geography: "#10b981",
+    item: "#f59e0b",
+    world: "#06b6d4",
+    rule: "#06b6d4",
+    other: "#64748b",
+  };
+
+  const THREAD_STATUS_META = {
+    active: { label: "推进中 active", cls: "badge-accent" },
+    planted: { label: "已埋设 planted", cls: "badge-cyan" },
+    dormant: { label: "潜伏 dormant", cls: "badge-neutral" },
+    resolved: { label: "已完结 resolved", cls: "badge-success" },
+  };
+
+  const RADAR_LABELS = {
+    window: "⏰ 窗口到期",
+    stale: "⚠️ 超期断线",
+    entity: "🎯 实体触发",
+  };
+
+  function escapeHtml(raw) {
+    if (raw === null || raw === undefined) return "";
+    return String(raw)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => el.classList.remove("show"), 2200);
+  }
+
+  function initTheme() {
+    let saved = "";
+    try { saved = localStorage.getItem("ddnovel_web_theme") || ""; } catch (_) {}
+    if (saved === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+    updateThemeBtn();
+  }
+
+  function updateThemeBtn() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    document.getElementById("btn-toggle-theme").textContent = isDark ? "☀️ 浅色" : "🌗 暗色";
+  }
+
+  function entityRefObj(eid) {
+    if (!eid) return null;
+    const ent = DATA && DATA.entities ? DATA.entities[eid] : null;
+    if (ent) {
+      return { id: eid, name: ent.name, category: ent.category, has_setting: true };
+    }
+    let cat = "other";
+    if (eid.startsWith("char_")) cat = "character";
+    else if (eid.startsWith("fac_")) cat = "faction";
+    else if (eid.startsWith("loc_")) cat = "geography";
+    else if (eid.startsWith("item_")) cat = "item";
+    else if (eid.startsWith("world_")) cat = "world";
+    else if (eid.startsWith("rule_")) cat = "rule";
+    return { id: eid, name: eid, category: cat, has_setting: false };
+  }
+
+  function renderEntityChip(refOrId, showIdAlways = false) {
+    const ref = typeof refOrId === "string" ? entityRefObj(refOrId) : refOrId;
+    if (!ref) return "";
+    const catCls = `cat-${escapeHtml(ref.category || "other")}`;
+    const missingCls = ref.has_setting ? "" : " missing-card";
+    const label = (ref.name && ref.name !== ref.id)
+      ? (showIdAlways ? `${ref.name} (${ref.id})` : ref.name)
+      : ref.id;
+    return `<button type="button" class="entity-chip ${catCls}${missingCls}" data-entity-id="${escapeHtml(ref.id)}" title="${escapeHtml(ref.id)}">${escapeHtml(label)}</button>`;
+  }
+
+  function isLikelyEntityId(val) {
+    if (typeof val !== "string") return false;
+    const s = val.trim();
+    if (!s) return false;
+    if (DATA && DATA.entities && DATA.entities[s]) return true;
+    return /^(char|fac|loc|item|world|rule)_[a-z0-9_]+$/.test(s);
+  }
+
+  function renderSmartValue(val) {
+    if (val === null || val === undefined || val === "") {
+      return `<span style="color:var(--text-subtle)">-</span>`;
+    }
+    if (typeof val === "boolean") {
+      return `<span class="badge ${val ? "badge-success" : "badge-neutral"}">${val ? "是" : "否"}</span>`;
+    }
+    if (typeof val === "number") {
+      return `<span class="mono">${escapeHtml(val)}</span>`;
+    }
+    if (typeof val === "string") {
+      if (isLikelyEntityId(val.trim())) {
+        return renderEntityChip(val.trim(), true);
+      }
+      return `<span style="white-space:pre-wrap">${escapeHtml(val)}</span>`;
+    }
+    if (Array.isArray(val)) {
+      if (val.length === 0) return `<span style="color:var(--text-subtle)">[]</span>`;
+      if (val.every((x) => typeof x === "string" && isLikelyEntityId(x.trim()))) {
+        return `<div>${val.map((x) => renderEntityChip(x.trim(), true)).join("")}</div>`;
+      }
+      if (val.every((x) => typeof x !== "object" || x === null)) {
+        return `<ul class="bullet-list">${val.map((x) => `<li>${renderSmartValue(x)}</li>`).join("")}</ul>`;
+      }
+      return `<div class="kv-list">${val.map((item, i) => `
+        <div class="kv-row">
+          <span class="kv-key">#${i + 1}</span>
+          <div class="kv-val">${renderSmartValue(item)}</div>
+        </div>`).join("")}</div>`;
+    }
+    if (typeof val === "object") {
+      const entries = Object.entries(val);
+      if (entries.length === 0) return `<span style="color:var(--text-subtle)">{}</span>`;
+      return `<div class="kv-list">${entries.map(([k, v]) => `
+        <div class="kv-row">
+          <span class="kv-key">${escapeHtml(k)}</span>
+          <div class="kv-val">${renderSmartValue(v)}</div>
+        </div>`).join("")}</div>`;
+    }
+    return escapeHtml(String(val));
+  }
+
+  function renderExtraSections(profileExt, extraFields) {
+    const htmlParts = [];
+    const pEntries = Object.entries(profileExt || {}).filter(([, v]) => {
+      if (v === null || v === undefined || v === "") return false;
+      if (Array.isArray(v) && v.length === 0) return false;
+      if (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0) return false;
+      return true;
+    });
+    if (pEntries.length > 0) {
+      htmlParts.push(`<div class="section-label">题材扩展状态 (profile_ext)</div>${renderSmartValue(Object.fromEntries(pEntries))}`);
+    }
+    const eEntries = Object.entries(extraFields || {}).filter(([, v]) => v !== null && v !== undefined && v !== "");
+    if (eEntries.length > 0) {
+      htmlParts.push(`<div class="section-label">自定义扩展字段</div>${renderSmartValue(Object.fromEntries(eEntries))}`);
+    }
+    return htmlParts.join("");
+  }
+
+  function renderSecretBlock(secretKey, text, label = "幕后真相 / 机密") {
+    if (!text) return "";
+    const unlocked = state.showSecrets || state.revealedIds.has(secretKey);
+    return `
+      <div class="secret-box">
+        <div class="secret-hint">
+          <span>🔒 ${escapeHtml(label)}</span>
+          <span>${unlocked ? "已显示" : "点击内容单条解锁"}</span>
+        </div>
+        <div class="${unlocked ? "" : "secret-masked"}" data-secret-key="${escapeHtml(secretKey)}" style="white-space:pre-wrap">${escapeHtml(text)}</div>
+      </div>`;
+  }
+
+  function renderTopbar() {
+    if (!DATA) return;
+    const b = DATA.book || {};
+    const ws = DATA.world_state || {};
+    document.title = `${b.title || "DDNovel"} · 状态与关系看板`;
+    document.getElementById("book-title").textContent = `《${b.title || "未命名小说"}》`;
+    document.getElementById("book-genre").textContent = b.genre_profile || "general";
+    document.getElementById("book-progress").textContent = `当前进度：第 ${b.effective_chapter || 0} 章`;
+    document.getElementById("book-time").textContent = ws.in_world_time ? `🕒 ${ws.in_world_time}` : "🕒 未记录历法时间";
+
+    const refreshBtn = document.getElementById("btn-refresh");
+    if (DATA._live_server) {
+      refreshBtn.style.display = "inline-flex";
+      refreshBtn.disabled = false;
+      refreshBtn.title = `上次同步: ${b.generated_at || ""}`;
+    } else {
+      refreshBtn.style.display = "none";
+    }
+
+    const s = DATA.stats || {};
+    document.getElementById("cnt-characters").textContent = s.characters_total ?? 0;
+    document.getElementById("cnt-relations").textContent = s.relations_total ?? 0;
+    document.getElementById("cnt-threads").textContent = s.threads_open ?? 0;
+    document.getElementById("cnt-factions").textContent = s.factions_total ?? 0;
+    document.getElementById("cnt-history").textContent = s.history_chapters ?? 0;
+
+    const warnBox = document.getElementById("warnings-container");
+    const warns = DATA.warnings || [];
+    if (warns.length > 0) {
+      warnBox.innerHTML = `
+        <details class="warning-banner">
+          <summary style="cursor:pointer;font-weight:600">⚠️ 检测到 ${warns.length} 条非致命解析告警（点击展开详情）</summary>
+          <ul class="bullet-list" style="margin-top:6px">${warns.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>
+        </details>`;
+    } else {
+      warnBox.innerHTML = "";
+    }
+  }
+
+  function renderOverview() {
+    const s = DATA.stats || {};
+    const b = DATA.book || {};
+    const ws = DATA.world_state || {};
+
+    const kpis = [
+      { label: "当前推进章节", val: `第 ${s.effective_chapter ?? 0} 章`, sub: `下一规划章：第 ${s.next_chapter ?? 1} 章`, tab: "history" },
+      { label: "人物档案（活跃/总计）", val: `${s.characters_active ?? 0} / ${s.characters_total ?? 0}`, sub: `共 ${s.entities_total ?? 0} 份设定卡`, tab: "characters" },
+      { label: "双时态关系（生效/总计）", val: `${s.relations_valid ?? 0} / ${s.relations_total ?? 0}`, sub: "支持章号时间轴回溯", tab: "relations" },
+      { label: "未完结悬线 / 伏笔", val: `${s.threads_open ?? 0}`, sub: `台账总计 ${s.threads_total ?? 0} 条`, tab: "threads" },
+      { label: "下章伏笔雷达预警", val: `${s.radar_alerts ?? 0}`, sub: s.radar_alerts > 0 ? "存在窗口到期/断线/实体命中" : "暂无紧急伏笔预警", tab: "threads" },
+      { label: "势力与工程文档", val: `${s.factions_active ?? 0} 势力`, sub: `${s.volumes_count ?? 0} 卷 · ${s.blueprints_count ?? 0} 蓝图 · ${s.manuscripts_count ?? 0} 定稿`, tab: "factions" },
+    ];
+    document.getElementById("overview-kpis").innerHTML = kpis.map((k) => `
+      <div class="kpi-card" data-jump-tab="${k.tab}">
+        <div class="kpi-label">${escapeHtml(k.label)}</div>
+        <div class="kpi-value">${escapeHtml(k.val)}</div>
+        <div class="kpi-sub">${escapeHtml(k.sub)}</div>
+      </div>`).join("");
+
+    const wsExtra = Object.keys(ws.extra_fields || {}).length > 0
+      ? `<div class="section-label">扩展世界状态字段</div>${renderSmartValue(ws.extra_fields)}`
+      : "";
+    document.getElementById("overview-world-card").innerHTML = `
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">🌍 当前世界状态与大势截面</h2>
+          <div style="font-size:12px;color:var(--text-subtle);margin-top:2px">
+            时间：${escapeHtml(ws.in_world_time || "未填写")} · 世界状态章号：第 ${escapeHtml(ws.current_chapter ?? 0)} 章 · 书库路径：<span class="mono">${escapeHtml(b.book_dir || "")}</span>
+          </div>
+        </div>
+        <span class="badge badge-neutral">更新于 ${escapeHtml(b.generated_at || "")}</span>
+      </div>
+      <div class="text-block">${escapeHtml(ws.macro_situation || "（暂无当前宏观大势描述）")}</div>
+      ${wsExtra}`;
+
+    const radarThreads = (DATA.threads || []).filter((t) => (t.radar_reasons || []).length > 0);
+    document.getElementById("overview-radar-card").innerHTML = `
+      <div class="card-header">
+        <h2 class="card-title">⚡ 第 ${escapeHtml(b.next_chapter ?? 1)} 章伏笔雷达预警 (${radarThreads.length})</h2>
+        <button type="button" class="btn btn-sm" data-jump-tab="threads">查看全部悬线</button>
+      </div>
+      ${radarThreads.length === 0
+        ? `<div class="text-block" style="color:var(--text-subtle)">第 ${escapeHtml(b.next_chapter ?? 1)} 章暂无窗口到期、超期断线或出场实体命中的悬线。</div>`
+        : radarThreads.map((t) => `
+          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:var(--surface-alt)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+              <strong>${escapeHtml(t.title)}</strong>
+              <div>${(t.radar_reasons || []).map((r) => `<span class="badge badge-warning">${escapeHtml(RADAR_LABELS[r] || r)}</span>`).join(" ")}</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${escapeHtml(t.radar_detail)}</div>
+            ${(t.trigger_entity_refs || []).length > 0 ? `<div style="margin-top:6px">${t.trigger_entity_refs.map((ref) => renderEntityChip(ref)).join("")}</div>` : ""}
+          </div>`).join("")}`;
+
+    const recent = (DATA.history || []).slice(0, 5);
+    document.getElementById("overview-recent-history").innerHTML = `
+      <div class="card-header">
+        <h2 class="card-title">🕒 近期章节历史摘要 (${recent.length})</h2>
+        <button type="button" class="btn btn-sm" data-jump-tab="history">完整时间线</button>
+      </div>
+      ${recent.length === 0
+        ? `<div class="text-block" style="color:var(--text-subtle)">暂无章节结算历史事实记录。</div>`
+        : recent.map((h) => `
+          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:var(--surface-alt)">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
+              <span class="badge badge-accent">第 ${escapeHtml(h.ch)} 章</span>
+              <span style="font-size:12px;color:var(--text-subtle)">${escapeHtml(h.in_world_time || "")}</span>
+            </div>
+            <div style="font-size:13px;font-weight:500">${escapeHtml(h.summary)}</div>
+            <ul class="bullet-list">${(h.facts || []).map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+          </div>`).join("")}`;
+  }
+
+  function populateDynamicFilters() {
+    const locSelect = document.getElementById("char-loc-filter");
+    const locMap = new Map();
+    for (const c of DATA.characters || []) {
+      if (c.location) {
+        locMap.set(c.location, c.location_ref ? c.location_ref.name : c.location);
+      }
+    }
+    const prevLoc = state.charLoc;
+    locSelect.innerHTML = `<option value="">全部所在地 (${locMap.size})</option>` +
+      Array.from(locMap.entries()).map(([id, name]) =>
+        `<option value="${escapeHtml(id)}">${escapeHtml(name)} (${escapeHtml(id)})</option>`
+      ).join("");
+    locSelect.value = locMap.has(prevLoc) ? prevLoc : "";
+    state.charLoc = locSelect.value;
+
+    const relEntSelect = document.getElementById("rel-entity-filter");
+    const relEntities = new Map();
+    for (const r of DATA.relations || []) {
+      relEntities.set(r.source, r.source_ref ? r.source_ref.name : r.source);
+      relEntities.set(r.target, r.target_ref ? r.target_ref.name : r.target);
+    }
+    const prevRelEnt = state.relEntity;
+    relEntSelect.innerHTML = `<option value="">全部关联实体 (${relEntities.size})</option>` +
+      Array.from(relEntities.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-CN")).map(([id, name]) =>
+        `<option value="${escapeHtml(id)}">${escapeHtml(name)} (${escapeHtml(id)})</option>`
+      ).join("");
+    relEntSelect.value = relEntities.has(prevRelEnt) ? prevRelEnt : "";
+    state.relEntity = relEntSelect.value;
+
+    const maxCh = Math.max(
+      1,
+      DATA.book?.effective_chapter || 1,
+      ...(DATA.relations || []).map((r) => Math.max(r.valid_from_ch || 1, r.invalid_at_ch || 1))
+    );
+    const slider = document.getElementById("rel-ch-slider");
+    slider.max = String(maxCh);
+    if (!state._relChapterInitialized) {
+      state.relChapter = Math.max(1, DATA.book?.effective_chapter || 1);
+      state._relChapterInitialized = true;
+    } else if (state.relChapter > maxCh) {
+      state.relChapter = maxCh;
+    }
+    slider.value = String(state.relChapter);
+    document.getElementById("rel-ch-label").textContent = `第 ${state.relChapter} 章`;
+
+    const volSelect = document.getElementById("hist-vol-filter");
+    const vols = new Set();
+    for (const h of DATA.history || []) {
+      if (h.volume_id) vols.add(h.volume_id);
+      else if (h.arc_id) vols.add(h.arc_id.split("_arc_")[0]);
+    }
+    const prevVol = state.histVol;
+    volSelect.innerHTML = `<option value="">全部分卷</option>` +
+      Array.from(vols).sort().map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    volSelect.value = vols.has(prevVol) ? prevVol : "";
+    state.histVol = volSelect.value;
+  }
+
+  function renderCharacters() {
+    const q = state.charSearch.trim().toLowerCase();
+    const list = (DATA.characters || []).filter((c) => {
+      if (state.charStatus === "active" && (c.is_archived || !c.has_state)) return false;
+      if (state.charStatus === "archived" && !c.is_archived) return false;
+      if (state.charStatus === "no_state" && c.has_state) return false;
+      if (state.charLoc && c.location !== state.charLoc) return false;
+      if (!q) return true;
+      const hay = [
+        c.id, c.name, ...(c.aliases || []), ...(c.tags || []),
+        c.physical_mental, ...(c.current_goals || []),
+        c.location_ref ? c.location_ref.name : "",
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+
+    document.getElementById("char-filter-count").textContent = `显示 ${list.length} / ${(DATA.characters || []).length}`;
+    const grid = document.getElementById("characters-grid");
+    if (list.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">没有符合筛选条件的人物档案。</div>`;
+      return;
+    }
+
+    grid.innerHTML = list.map((c) => {
+      const eb = c.epistemic_bounds || { knows: [], unaware_of: [], misbelieves: [] };
+      const ebTotal = (eb.knows || []).length + (eb.unaware_of || []).length + (eb.misbelieves || []).length;
+      const statusBadge = c.is_archived
+        ? `<span class="badge badge-neutral">已归档</span>`
+        : c.has_state
+          ? `<span class="badge badge-success">活跃 · 更新第${escapeHtml(c.updated_at_ch)}章</span>`
+          : `<span class="badge badge-warning">仅静态设定</span>`;
+      return `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(c.name)} <span class="mono" style="color:var(--text-subtle);font-weight:400">${escapeHtml(c.id)}</span></h3>
+              <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                ${statusBadge}
+                ${c.setting_status && c.setting_status !== "active" ? `<span class="badge badge-danger">${escapeHtml(c.setting_status)}</span>` : ""}
+                ${c.location_ref ? `<span>📍 ${renderEntityChip(c.location_ref)}</span>` : ""}
+              </div>
+              ${(c.aliases || []).length > 0 ? `<div style="font-size:12px;color:var(--text-subtle);margin-top:4px">别名：${escapeHtml(c.aliases.join("、"))}</div>` : ""}
+            </div>
+            <button type="button" class="btn btn-sm" data-entity-id="${escapeHtml(c.id)}">完整档案</button>
+          </div>
+
+          ${c.physical_mental ? `<div class="section-label">当前状态 / 身心情况</div><div class="text-block">${escapeHtml(c.physical_mental)}</div>` : ""}
+
+          ${(c.current_goals || []).length > 0 ? `
+            <div class="section-label">当前目标 (${c.current_goals.length})</div>
+            <ul class="bullet-list">${c.current_goals.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>` : ""}
+
+          ${ebTotal > 0 ? `
+            <details class="epistemic-box">
+              <summary>🧠 认知边界：已知 ${(eb.knows || []).length} · 未知 ${(eb.unaware_of || []).length} · 误信 ${(eb.misbelieves || []).length}</summary>
+              <div class="epistemic-inner">
+                ${(eb.knows || []).length > 0 ? `<div><span class="badge badge-success">已知 knows</span><ul class="bullet-list">${eb.knows.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+                ${(eb.unaware_of || []).length > 0 ? `<div><span class="badge badge-warning">未知 unaware_of</span><ul class="bullet-list">${eb.unaware_of.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+                ${(eb.misbelieves || []).length > 0 ? `<div><span class="badge badge-danger">误信 misbelieves</span><ul class="bullet-list">${eb.misbelieves.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+              </div>
+            </details>` : ""}
+
+          ${renderExtraSections(c.profile_ext, c.extra_fields)}
+        </article>`;
+    }).join("");
+  }
+
+  function isRelationValidAt(rel, ch) {
+    if (rel.is_archived_file) return false;
+    return rel.valid_from_ch <= ch && (rel.invalid_at_ch === null || rel.invalid_at_ch === undefined || ch < rel.invalid_at_ch);
+  }
+
+  function getFilteredRelations() {
+    const q = state.relSearch.trim().toLowerCase();
+    return (DATA.relations || []).filter((r) => {
+      if (state.relMode === "at_chapter" && !isRelationValidAt(r, state.relChapter)) return false;
+      if (state.relEntity && r.source !== state.relEntity && r.target !== state.relEntity) return false;
+      if (!q) return true;
+      const hay = [
+        r.source, r.source_ref?.name || "",
+        r.target, r.target_ref?.name || "",
+        r.relation,
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function computeForceLayout(nodes, edges, width, height, forceReset = false) {
+    const n = nodes.length;
+    if (n === 0) return;
+
+    const cx = width / 2;
+    const cy = height / 2;
+    const radius = Math.min(width, height) * 0.34;
+    const pos = new Map();
+
+    nodes.forEach((node, idx) => {
+      const prev = !forceReset ? state.graphPositions.get(node.id) : null;
+      if (prev) {
+        pos.set(node.id, { x: prev.x, y: prev.y, vx: 0, vy: 0 });
+      } else {
+        const angle = (2 * Math.PI * idx) / Math.max(1, n);
+        pos.set(node.id, {
+          x: cx + radius * Math.cos(angle),
+          y: cy + radius * Math.sin(angle),
+          vx: 0,
+          vy: 0,
+        });
+      }
+    });
+
+    const needsSim = forceReset || nodes.some((node) => !state.graphPositions.has(node.id));
+    if (needsSim && n > 1) {
+      const kRepel = 14000;
+      const idealLen = Math.min(200, Math.max(125, Math.sqrt((width * height) / Math.max(2, n)) * 0.85));
+      const steps = 150;
+      for (let step = 0; step < steps; step++) {
+        const alpha = 0.28 * (1 - step / steps) + 0.02;
+        for (let i = 0; i < n; i++) {
+          const u = pos.get(nodes[i].id);
+          for (let j = i + 1; j < n; j++) {
+            const v = pos.get(nodes[j].id);
+            let dx = u.x - v.x;
+            let dy = u.y - v.y;
+            let d2 = dx * dx + dy * dy;
+            if (d2 < 1) { dx = (i + 1) * 0.7; dy = (j + 1) * 0.7; d2 = dx * dx + dy * dy; }
+            const d = Math.sqrt(d2);
+            const f = kRepel / d2;
+            const fx = (dx / d) * f;
+            const fy = (dy / d) * f;
+            u.vx += fx; u.vy += fy;
+            v.vx -= fx; v.vy -= fy;
+          }
+        }
+        for (const e of edges) {
+          const u = pos.get(e.source);
+          const v = pos.get(e.target);
+          if (!u || !v) continue;
+          const dx = v.x - u.x;
+          const dy = v.y - u.y;
+          const d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const f = (d - idealLen) * 0.075;
+          const fx = (dx / d) * f;
+          const fy = (dy / d) * f;
+          u.vx += fx; u.vy += fy;
+          v.vx -= fx; v.vy -= fy;
+        }
+        for (const node of nodes) {
+          const p = pos.get(node.id);
+          p.vx += (cx - p.x) * 0.03;
+          p.vy += (cy - p.y) * 0.03;
+          p.x += Math.max(-24, Math.min(24, p.vx * alpha));
+          p.y += Math.max(-24, Math.min(24, p.vy * alpha));
+          p.vx *= 0.55;
+          p.vy *= 0.55;
+        }
+      }
+    }
+
+    nodes.forEach((node) => {
+      const p = pos.get(node.id);
+      state.graphPositions.set(node.id, { x: p.x, y: p.y });
+    });
+  }
+
+  function renderRelations(forceRelayout = false) {
+    const rels = getFilteredRelations();
+    renderRelationsTable(rels);
+    renderRelationsGraph(rels, forceRelayout);
+  }
+
+  function renderRelationsTable(rels) {
+    const wrap = document.getElementById("relations-table-wrap");
+    if (rels.length === 0) {
+      wrap.innerHTML = `<div class="empty-state" style="border:none">当前筛选条件下暂无关系记录。</div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>起点实体</th>
+            <th>关系描述</th>
+            <th>终点实体</th>
+            <th>生效区间</th>
+            <th>状态 (${rels.length} 条)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rels.map((r) => {
+            const validNow = state.relMode === "at_chapter"
+              ? isRelationValidAt(r, state.relChapter)
+              : r.is_currently_valid;
+            const windowText = r.invalid_at_ch
+              ? `第 ${r.valid_from_ch} 章 ~ 第 ${r.invalid_at_ch} 章前`
+              : `第 ${r.valid_from_ch} 章 ~ 当前`;
+            const statusBadge = r.is_archived_file
+              ? `<span class="badge badge-neutral">已归档</span>`
+              : validNow
+                ? `<span class="badge badge-success">生效中</span>`
+                : `<span class="badge badge-danger">已失效</span>`;
+            return `
+              <tr class="${validNow && !r.is_archived_file ? "" : "row-inactive"}">
+                <td>${renderEntityChip(r.source_ref, true)}</td>
+                <td>
+                  <div>${escapeHtml(r.relation)}</div>
+                  ${Object.keys(r.extra_fields || {}).length > 0 ? `<div style="margin-top:4px">${renderSmartValue(r.extra_fields)}</div>` : ""}
+                </td>
+                <td>${renderEntityChip(r.target_ref, true)}</td>
+                <td><span class="mono">${escapeHtml(windowText)}</span></td>
+                <td>${statusBadge}</td>
+              </tr>`;
+          }).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  function renderRelationsGraph(rels, forceRelayout = false) {
+    const vp = document.getElementById("graph-viewport");
+    const inspector = document.getElementById("graph-node-inspector");
+    const svg = document.getElementById("rel-svg");
+
+    const nodeMap = new Map();
+    const degreeMap = new Map();
+    for (const r of rels) {
+      if (!nodeMap.has(r.source)) nodeMap.set(r.source, r.source_ref || entityRefObj(r.source));
+      if (!nodeMap.has(r.target)) nodeMap.set(r.target, r.target_ref || entityRefObj(r.target));
+      degreeMap.set(r.source, (degreeMap.get(r.source) || 0) + 1);
+      degreeMap.set(r.target, (degreeMap.get(r.target) || 0) + 1);
+    }
+
+    const nodes = Array.from(nodeMap.values());
+    if (nodes.length === 0) {
+      vp.innerHTML = `<text x="500" y="270" text-anchor="middle" fill="var(--text-subtle)" font-size="14">当前筛选条件下无可绘制的关系图谱节点</text>`;
+      inspector.classList.remove("open");
+      return;
+    }
+
+    computeForceLayout(nodes, rels, 1000, 540, forceRelayout);
+
+    // Group edges between same unordered node pair to compute curved offsets
+    const pairGroups = new Map();
+    rels.forEach((r) => {
+      const key = r.source < r.target ? `${r.source}::${r.target}` : `${r.target}::${r.source}`;
+      if (!pairGroups.has(key)) pairGroups.set(key, []);
+      pairGroups.get(key).push(r);
+    });
+
+    const edgeCurveOffset = new Map();
+    for (const group of pairGroups.values()) {
+      const m = group.length;
+      group.forEach((r, idx) => {
+        if (m === 1) {
+          edgeCurveOffset.set(r.id, 0);
+        } else {
+          const offset = (idx - (m - 1) / 2) * 34;
+          const sign = r.source < r.target ? 1 : -1;
+          edgeCurveOffset.set(r.id, offset * sign);
+        }
+      });
+    }
+
+    const selected = state.selectedNodeId && nodeMap.has(state.selectedNodeId) ? state.selectedNodeId : null;
+    const neighborIds = new Set();
+    if (selected) {
+      neighborIds.add(selected);
+      for (const r of rels) {
+        if (r.source === selected) neighborIds.add(r.target);
+        if (r.target === selected) neighborIds.add(r.source);
+      }
+    }
+
+    const edgesHtml = rels.map((r) => {
+      const p1 = state.graphPositions.get(r.source);
+      const p2 = state.graphPositions.get(r.target);
+      if (!p1 || !p2) return "";
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const rTarget = Math.min(26, 15 + (degreeMap.get(r.target) || 1) * 1.1) + 4;
+      const rSource = Math.min(26, 15 + (degreeMap.get(r.source) || 1) * 1.1) + 2;
+
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const sx = p1.x + ux * rSource;
+      const sy = p1.y + uy * rSource;
+      const tx = p2.x - ux * rTarget;
+      const ty = p2.y - uy * rTarget;
+
+      const curve = edgeCurveOffset.get(r.id) || 0;
+      const nx = -uy;
+      const ny = ux;
+      const cx = (sx + tx) / 2 + nx * curve;
+      const cy = (sy + ty) / 2 + ny * curve;
+      const lx = 0.25 * sx + 0.5 * cx + 0.25 * tx;
+      const ly = 0.25 * sy + 0.5 * cy + 0.25 * ty;
+
+      const validNow = state.relMode === "at_chapter" ? isRelationValidAt(r, state.relChapter) : r.is_currently_valid;
+      const isFocus = selected && (r.source === selected || r.target === selected);
+      const dimmed = selected && !isFocus;
+      const stroke = isFocus ? "#2563eb" : (validNow && !r.is_archived_file ? "#64748b" : "#94a3b8");
+      const marker = isFocus ? "url(#arrow-active)" : (validNow && !r.is_archived_file ? "url(#arrow-valid)" : "url(#arrow-invalid)");
+      const dash = validNow && !r.is_archived_file ? "" : `stroke-dasharray="5 4"`;
+      const shortRel = r.relation.length > 10 ? r.relation.slice(0, 10) + "…" : r.relation;
+
+      return `
+        <g class="graph-edge" data-rel-id="${escapeHtml(r.id)}" style="opacity:${dimmed ? 0.16 : 0.92}">
+          <path d="M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${tx.toFixed(1)} ${ty.toFixed(1)}"
+                fill="none" stroke="${stroke}" stroke-width="${isFocus ? 2.4 : 1.5}" ${dash} marker-end="${marker}" />
+          <text x="${lx.toFixed(1)}" y="${(ly - 3).toFixed(1)}" text-anchor="middle" font-size="10.5"
+                fill="var(--text-muted)" style="paint-order:stroke;stroke:var(--surface);stroke-width:3px">${escapeHtml(shortRel)}</text>
+          <title>${escapeHtml(r.source_ref?.name || r.source)} → ${escapeHtml(r.target_ref?.name || r.target)}：${escapeHtml(r.relation)}</title>
+        </g>`;
+    }).join("");
+
+    const nodesHtml = nodes.map((node) => {
+      const p = state.graphPositions.get(node.id);
+      const deg = degreeMap.get(node.id) || 1;
+      const rad = Math.min(26, 15 + deg * 1.1);
+      const color = CAT_COLORS[node.category] || CAT_COLORS.other;
+      const isSelected = selected === node.id;
+      const dimmed = selected && !neighborIds.has(node.id);
+      const label = node.name && node.name !== node.id ? node.name : node.id;
+      return `
+        <g class="graph-node" data-node-id="${escapeHtml(node.id)}" transform="translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)})"
+           style="cursor:pointer;opacity:${dimmed ? 0.22 : 1}">
+          <circle r="${rad}" fill="${color}" stroke="${isSelected ? "var(--text)" : "var(--surface)"}" stroke-width="${isSelected ? 3.5 : 2}" />
+          <text y="4" text-anchor="middle" fill="#ffffff" font-size="11" font-weight="700" pointer-events="none">${escapeHtml(label.slice(0, 4))}</text>
+          <text y="${rad + 14}" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="${isSelected ? 700 : 500}"
+                style="paint-order:stroke;stroke:var(--surface);stroke-width:3px">${escapeHtml(label)}</text>
+        </g>`;
+    }).join("");
+
+    const t = state.graphTransform;
+    vp.setAttribute("transform", `translate(${t.x}, ${t.y}) scale(${t.k})`);
+    vp.innerHTML = `${edgesHtml}${nodesHtml}`;
+    svg.dataset.ready = "1";
+
+    if (selected) {
+      const selNode = nodeMap.get(selected);
+      const relList = rels.filter((r) => r.source === selected || r.target === selected);
+      inspector.classList.add("open");
+      inspector.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+          <strong>${escapeHtml(selNode.name)}</strong>
+          <button type="button" class="btn btn-sm" id="graph-clear-sel">取消选中</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-subtle);margin-bottom:8px">
+          <span class="mono">${escapeHtml(selNode.id)}</span> · ${escapeHtml(CAT_LABELS[selNode.category] || selNode.category)}
+        </div>
+        <button type="button" class="btn btn-sm" style="width:100%;justify-content:center;margin-bottom:10px" data-entity-id="${escapeHtml(selNode.id)}">打开完整实体档案</button>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">当前视图关系 (${relList.length})</div>
+        ${relList.map((r) => {
+          const isOut = r.source === selected;
+          const other = isOut ? r.target_ref : r.source_ref;
+          return `<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span>${isOut ? "→ 指向" : "← 来自"}</span> ${renderEntityChip(other)}
+            <div style="color:var(--text-muted);margin-top:2px">${escapeHtml(r.relation)}</div>
+          </div>`;
+        }).join("")}`;
+    } else {
+      inspector.classList.remove("open");
+    }
+  }
+
+  function renderThreads() {
+    const q = state.threadSearch.trim().toLowerCase();
+    const list = (DATA.threads || []).filter((t) => {
+      const isOpen = !t.is_archived && t.status !== "resolved";
+      if (state.threadStatus === "open" && !isOpen) return false;
+      if (state.threadStatus === "radar" && (t.radar_reasons || []).length === 0) return false;
+      if (["active", "planted", "dormant"].includes(state.threadStatus) && (t.is_archived || t.status !== state.threadStatus)) return false;
+      if (state.threadStatus === "resolved" && isOpen) return false;
+      if (!q) return true;
+      const hay = [
+        t.id, t.title, t.category || "", t.public_clue || "", t.truth_secret || "",
+        JSON.stringify(t.extra_fields || {}),
+        ...(t.trigger_entity_refs || []).map((r) => `${r.id} ${r.name}`),
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+
+    document.getElementById("thread-filter-count").textContent = `显示 ${list.length} / ${(DATA.threads || []).length}`;
+    const grid = document.getElementById("threads-grid");
+    if (list.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">没有符合条件的伏笔悬线。</div>`;
+      return;
+    }
+
+    grid.innerHTML = list.map((t) => {
+      const meta = THREAD_STATUS_META[t.status] || { label: t.status, cls: "badge-neutral" };
+      const winText = t.expected_window ? `[第 ${t.expected_window[0]} ~ ${t.expected_window[1]} 章]` : "未设定窗口";
+      return `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(t.title)}</h3>
+              <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+                <span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span>
+                ${t.is_archived ? `<span class="badge badge-neutral">已归档</span>` : ""}
+                ${t.category ? `<span class="badge badge-neutral">${escapeHtml(t.category)}</span>` : ""}
+                <span class="mono" style="color:var(--text-subtle);align-self:center">${escapeHtml(t.id)}</span>
+              </div>
+            </div>
+          </div>
+
+          ${(t.radar_reasons || []).length > 0 ? `
+            <div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--warning-soft);border:1px solid var(--warning);font-size:12px">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+                ${t.radar_reasons.map((r) => `<span class="badge badge-warning">${escapeHtml(RADAR_LABELS[r] || r)}</span>`).join("")}
+              </div>
+              <div>${escapeHtml(t.radar_detail)}</div>
+            </div>` : ""}
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-bottom:8px">
+            <span class="badge badge-neutral">埋设：第 ${escapeHtml(t.planted_at)} 章</span>
+            <span class="badge badge-neutral">最近推进：第 ${escapeHtml(t.last_progressed_at)} 章（距今 ${escapeHtml(t.gap_chapters)} 章）</span>
+            <span class="badge badge-neutral">预计窗口：${escapeHtml(winText)}</span>
+          </div>
+
+          ${(t.trigger_entity_refs || []).length > 0 ? `
+            <div class="section-label">关联触发实体</div>
+            <div>${t.trigger_entity_refs.map((ref) => renderEntityChip(ref)).join("")}</div>` : ""}
+
+          ${t.public_clue ? `<div class="section-label">表面线索 (public_clue)</div><div class="text-block">${escapeHtml(t.public_clue)}</div>` : ""}
+          ${renderExtraSections(null, t.extra_fields)}
+          ${renderSecretBlock(`thread:${t.id}`, t.truth_secret, "幕后真相 (truth_secret)")}
+        </article>`;
+    }).join("");
+  }
+
+  function renderFactions() {
+    const q = state.facSearch.trim().toLowerCase();
+    const list = (DATA.factions || []).filter((f) => {
+      if (state.facStatus === "active" && (f.is_archived || !f.has_state)) return false;
+      if (state.facStatus === "archived" && !f.is_archived) return false;
+      if (state.facStatus === "no_state" && f.has_state) return false;
+      if (!q) return true;
+      const hay = [
+        f.id, f.name, ...(f.aliases || []), ...(f.current_goals || []),
+        JSON.stringify(f.extra_fields || {}),
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+
+    document.getElementById("fac-filter-count").textContent = `显示 ${list.length} / ${(DATA.factions || []).length}`;
+    const grid = document.getElementById("factions-grid");
+    if (list.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">没有符合筛选条件的势力档案。</div>`;
+      return;
+    }
+
+    grid.innerHTML = list.map((f) => {
+      const statusBadge = f.is_archived
+        ? `<span class="badge badge-neutral">已归档</span>`
+        : f.has_state
+          ? `<span class="badge badge-success">${escapeHtml(f.status)} · 更新第${escapeHtml(f.updated_at_ch)}章</span>`
+          : `<span class="badge badge-warning">仅静态设定</span>`;
+      return `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(f.name)} <span class="mono" style="color:var(--text-subtle);font-weight:400">${escapeHtml(f.id)}</span></h3>
+              <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                ${statusBadge}
+                ${f.leader_ref ? `<span>👑 首领：${renderEntityChip(f.leader_ref)}</span>` : ""}
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm" data-entity-id="${escapeHtml(f.id)}">完整档案</button>
+          </div>
+
+          ${(f.territory_refs || []).length > 0 ? `
+            <div class="section-label">控制领地 / 驻地实体</div>
+            <div>${f.territory_refs.map((ref) => renderEntityChip(ref)).join("")}</div>` : ""}
+
+          ${(f.current_goals || []).length > 0 ? `
+            <div class="section-label">当前势力目标</div>
+            <ul class="bullet-list">${f.current_goals.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>` : ""}
+
+          ${renderExtraSections(f.profile_ext, f.extra_fields)}
+        </article>`;
+    }).join("");
+  }
+
+  function renderHistoryAndSettings() {
+    const q = state.histSearch.trim().toLowerCase();
+    const wrap = document.getElementById("history-content");
+    const volSel = document.getElementById("hist-vol-filter");
+    const catSel = document.getElementById("setting-cat-filter");
+
+    if (state.histSubtab === "facts") {
+      volSel.style.display = "inline-block";
+      catSel.style.display = "none";
+      const list = (DATA.history || []).filter((h) => {
+        const vol = h.volume_id || (h.arc_id ? h.arc_id.split("_arc_")[0] : "");
+        if (state.histVol && vol !== state.histVol) return false;
+        if (!q) return true;
+        const hay = [
+          `第${h.ch}章`, h.in_world_time || "", h.summary || "",
+          ...(h.facts || []),
+          ...(h.entity_refs || []).map((r) => `${r.id} ${r.name}`),
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+      document.getElementById("hist-filter-count").textContent = `显示 ${list.length} / ${(DATA.history || []).length} 章`;
+      if (list.length === 0) {
+        wrap.innerHTML = `<div class="empty-state">暂无匹配的章节历史事实记录。</div>`;
+        return;
+      }
+      wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">${list.map((h) => `
+        <article class="card">
+          <div class="card-header">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="badge badge-accent">第 ${escapeHtml(h.ch)} 章</span>
+              ${h.volume_id ? `<span class="badge badge-neutral">${escapeHtml(h.volume_id)}</span>` : ""}
+              ${h.arc_id ? `<span class="badge badge-neutral">${escapeHtml(h.arc_id)}</span>` : ""}
+              ${h.in_world_time ? `<span style="font-size:12px;color:var(--text-subtle)">🕒 ${escapeHtml(h.in_world_time)}</span>` : ""}
+            </div>
+            <span class="mono" style="color:var(--text-subtle)">${escapeHtml(h.source_file)}</span>
+          </div>
+          <div style="font-weight:600;margin-bottom:6px">${escapeHtml(h.summary)}</div>
+          <ul class="bullet-list">${(h.facts || []).map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+          ${(h.entity_refs || []).length > 0 ? `<div style="margin-top:8px">${h.entity_refs.map((r) => renderEntityChip(r)).join("")}</div>` : ""}
+        </article>`).join("")}</div>`;
+    } else {
+      volSel.style.display = "none";
+      catSel.style.display = "inline-block";
+      const allEnts = Object.values(DATA.entities || {}).sort((a, b) => a.id.localeCompare(b.id));
+      const list = allEnts.filter((e) => {
+        if (state.settingCat && e.category !== state.settingCat) return false;
+        if (!q) return true;
+        const hay = [
+          e.id, e.name, ...(e.aliases || []), ...(e.tags || []), e.core_text || "",
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+      document.getElementById("hist-filter-count").textContent = `显示 ${list.length} / ${allEnts.length} 份设定卡`;
+      if (list.length === 0) {
+        wrap.innerHTML = `<div class="empty-state">没有匹配的静态设定卡。</div>`;
+        return;
+      }
+      wrap.innerHTML = `<div class="cards-grid">${list.map((e) => `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(e.name)} <span class="mono" style="color:var(--text-subtle);font-weight:400">${escapeHtml(e.id)}</span></h3>
+              <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
+                <span class="badge badge-accent">${escapeHtml(CAT_LABELS[e.category] || e.category)}</span>
+                <span class="badge ${e.status === "active" ? "badge-success" : "badge-neutral"}">${escapeHtml(e.status)}</span>
+                ${(e.aliases || []).length > 0 ? `<span class="badge badge-neutral">别名: ${escapeHtml(e.aliases.join("、"))}</span>` : ""}
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm" data-entity-id="${escapeHtml(e.id)}">查看详情</button>
+          </div>
+          ${e.core_text ? `<div class="text-block" style="max-height:140px;overflow:hidden">${escapeHtml(e.core_text)}</div>` : ""}
+          ${renderSecretBlock(`setting:${e.id}`, e.secret_text, "[机密] 切片")}
+        </article>`).join("")}</div>`;
+    }
+  }
+
+  function openEntityDrawer(entityId) {
+    if (!DATA || !entityId) return;
+    document.getElementById("entity-drawer").dataset.currentEntity = entityId;
+    const ent = (DATA.entities || {})[entityId];
+    const charSt = (DATA.characters || []).find((c) => c.id === entityId && c.has_state);
+    const facSt = (DATA.factions || []).find((f) => f.id === entityId && f.has_state);
+    const ref = entityRefObj(entityId);
+
+    document.getElementById("drawer-title").textContent = `${ref.name} (${entityId})`;
+    const subParts = [
+      `<span class="badge badge-accent">${escapeHtml(CAT_LABELS[ref.category] || ref.category)}</span>`,
+    ];
+    if (ent) {
+      subParts.push(`<span class="badge ${ent.status === "active" ? "badge-success" : "badge-neutral"}">${escapeHtml(ent.status)}</span>`);
+      if ((ent.aliases || []).length > 0) subParts.push(`<span class="badge badge-neutral">别名: ${escapeHtml(ent.aliases.join("、"))}</span>`);
+      if (ent.file_path) subParts.push(`<span class="mono" style="color:var(--text-subtle)">${escapeHtml(ent.file_path)}</span>`);
+    } else {
+      subParts.push(`<span class="badge badge-warning">未建静态设定卡</span>`);
+    }
+    document.getElementById("drawer-subtitle").innerHTML = subParts.join("");
+
+    const bodyParts = [];
+
+    if (charSt) {
+      const eb = charSt.epistemic_bounds || { knows: [], unaware_of: [], misbelieves: [] };
+      bodyParts.push(`
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header">
+            <h3 class="card-title">📊 角色当前状态截面</h3>
+            <span class="badge ${charSt.is_archived ? "badge-neutral" : "badge-success"}">${charSt.is_archived ? "冷库归档" : `更新于第 ${escapeHtml(charSt.updated_at_ch)} 章`}</span>
+          </div>
+          ${charSt.location_ref ? `<div style="margin-bottom:8px">📍 所在地：${renderEntityChip(charSt.location_ref, true)}</div>` : ""}
+          ${charSt.physical_mental ? `<div class="section-label">身心状态</div><div class="text-block">${escapeHtml(charSt.physical_mental)}</div>` : ""}
+          ${(charSt.current_goals || []).length > 0 ? `<div class="section-label">当前目标</div><ul class="bullet-list">${charSt.current_goals.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>` : ""}
+          <div class="section-label">认知边界</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${(eb.knows || []).length > 0 ? `<div><span class="badge badge-success">已知 knows</span><ul class="bullet-list">${eb.knows.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+            ${(eb.unaware_of || []).length > 0 ? `<div><span class="badge badge-warning">未知 unaware_of</span><ul class="bullet-list">${eb.unaware_of.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+            ${(eb.misbelieves || []).length > 0 ? `<div><span class="badge badge-danger">误信 misbelieves</span><ul class="bullet-list">${eb.misbelieves.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : ""}
+          </div>
+          ${renderExtraSections(charSt.profile_ext, charSt.extra_fields)}
+        </div>`);
+    }
+
+    if (facSt) {
+      bodyParts.push(`
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header">
+            <h3 class="card-title">🏛️ 势力当前状态截面</h3>
+            <span class="badge ${facSt.is_archived ? "badge-neutral" : "badge-success"}">${escapeHtml(facSt.status)} · 第 ${escapeHtml(facSt.updated_at_ch)} 章</span>
+          </div>
+          ${facSt.leader_ref ? `<div style="margin-bottom:8px">👑 首领：${renderEntityChip(facSt.leader_ref, true)}</div>` : ""}
+          ${(facSt.territory_refs || []).length > 0 ? `<div style="margin-bottom:8px">🗺️ 领地：${facSt.territory_refs.map((r) => renderEntityChip(r, true)).join("")}</div>` : ""}
+          ${(facSt.current_goals || []).length > 0 ? `<div class="section-label">当前目标</div><ul class="bullet-list">${facSt.current_goals.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>` : ""}
+          ${renderExtraSections(facSt.profile_ext, facSt.extra_fields)}
+        </div>`);
+    }
+
+    const rels = (DATA.relations || []).filter((r) => r.source === entityId || r.target === entityId);
+    bodyParts.push(`
+      <div class="card" style="margin-bottom:14px">
+        <h3 class="card-title" style="margin-bottom:8px">🕸️ 关联双时态关系 (${rels.length})</h3>
+        ${rels.length === 0 ? `<div style="color:var(--text-subtle);font-size:13px">暂无相关关系边。</div>` : rels.map((r) => {
+          const isOut = r.source === entityId;
+          const other = isOut ? r.target_ref : r.source_ref;
+          const winText = r.invalid_at_ch ? `第${r.valid_from_ch}~${r.invalid_at_ch}章前` : `第${r.valid_from_ch}章~今`;
+          return `<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
+              <span>${isOut ? "→" : "←"} ${renderEntityChip(other, true)}</span>
+              <span class="badge ${r.is_currently_valid ? "badge-success" : "badge-neutral"}">${escapeHtml(winText)}</span>
+            </div>
+            <div style="color:var(--text-muted);margin-top:2px">${escapeHtml(r.relation)}</div>
+          </div>`;
+        }).join("")}
+      </div>`);
+
+    const linkedThreads = (DATA.threads || []).filter((t) => (t.trigger_entities || []).includes(entityId));
+    if (linkedThreads.length > 0) {
+      bodyParts.push(`
+        <div class="card" style="margin-bottom:14px">
+          <h3 class="card-title" style="margin-bottom:8px">🧵 关联伏笔悬线 (${linkedThreads.length})</h3>
+          ${linkedThreads.map((t) => `
+            <div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <strong>${escapeHtml(t.title)}</strong> <span class="badge badge-neutral">${escapeHtml(t.status)}</span>
+              ${t.public_clue ? `<div style="color:var(--text-muted);font-size:12px;margin-top:2px">${escapeHtml(t.public_clue)}</div>` : ""}
+            </div>`).join("")}
+        </div>`);
+    }
+
+    if (ent) {
+      const topicEntries = Object.entries(ent.topics || {});
+      bodyParts.push(`
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:8px">📄 静态设定卡 (01_设定集)</h3>
+          ${(ent.tags || []).length > 0 ? `<div style="margin-bottom:8px">${ent.tags.map((tag) => `<span class="badge badge-neutral">#${escapeHtml(tag)}</span>`).join(" ")}</div>` : ""}
+          ${ent.core_text ? `<div class="section-label">[核心]</div><div class="text-block">${escapeHtml(ent.core_text)}</div>` : ""}
+          ${topicEntries.map(([tName, tBody]) => `
+            <details class="epistemic-box" style="margin-top:8px">
+              <summary>📑 [专题: ${escapeHtml(tName)}]</summary>
+              <div class="epistemic-inner"><div class="text-block">${escapeHtml(tBody)}</div></div>
+            </details>`).join("")}
+          ${renderSecretBlock(`drawer:${ent.id}`, ent.secret_text, "[机密] 底牌")}
+          ${renderExtraSections(null, ent.extra_fields)}
+        </div>`);
+    }
+
+    document.getElementById("drawer-body").innerHTML = bodyParts.join("");
+    document.getElementById("drawer-backdrop").classList.add("open");
+    const drawer = document.getElementById("entity-drawer");
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+
+  function closeEntityDrawer() {
+    document.getElementById("drawer-backdrop").classList.remove("open");
+    const drawer = document.getElementById("entity-drawer");
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+
+  function switchTab(tabName) {
+    state.activeTab = tabName;
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll(".view-panel").forEach((panel) => {
+      panel.classList.toggle("active", panel.id === `panel-${tabName}`);
+    });
+    if (tabName === "relations") {
+      renderRelations(false);
+    }
+  }
+
+  function renderAll(forceRelayout = false) {
+    if (!DATA) {
+      document.querySelector(".container").innerHTML = `<div class="empty-state">未加载到有效书库快照数据。</div>`;
+      return;
+    }
+    populateDynamicFilters();
+    renderTopbar();
+    renderOverview();
+    renderCharacters();
+    renderRelations(forceRelayout);
+    renderThreads();
+    renderFactions();
+    renderHistoryAndSettings();
+  }
+
+  async function refreshFromServer() {
+    if (!DATA || !DATA._live_server) return;
+    const btn = document.getElementById("btn-refresh");
+    btn.disabled = true;
+    btn.textContent = "⏳ 刷新中...";
+    try {
+      const resp = await fetch("/api/dashboard", { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const next = await resp.json();
+      next._live_server = true;
+      DATA = next;
+      state._relChapterInitialized = false;
+      renderAll(false);
+      showToast("✅ 已同步最新书库状态");
+    } catch (err) {
+      showToast(`❌ 刷新失败: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🔄 刷新数据";
+    }
+  }
+
+  function bindPillGroup(containerId, onSelect) {
+    const box = document.getElementById(containerId);
+    box.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".pill-opt");
+      if (!btn) return;
+      box.querySelectorAll(".pill-opt").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      onSelect(btn.dataset.val);
+    });
+  }
+
+  function initGraphInteractions() {
+    const svg = document.getElementById("rel-svg");
+    const vp = document.getElementById("graph-viewport");
+    let dragMode = null; // { type: 'node', id, startX, startY, origX, origY, moved } | { type: 'pan', startX, startY, origTx, origTy }
+
+    function svgPoint(clientX, clientY) {
+      const rect = svg.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 1000;
+      const y = ((clientY - rect.top) / rect.height) * 540;
+      return { x, y };
+    }
+
+    svg.addEventListener("mousedown", (ev) => {
+      const nodeEl = ev.target.closest(".graph-node");
+      const pt = svgPoint(ev.clientX, ev.clientY);
+      if (nodeEl) {
+        const nid = nodeEl.dataset.nodeId;
+        const p = state.graphPositions.get(nid);
+        if (!p) return;
+        dragMode = { type: "node", id: nid, startX: pt.x, startY: pt.y, origX: p.x, origY: p.y, moved: false };
+      } else {
+        dragMode = {
+          type: "pan",
+          startX: pt.x,
+          startY: pt.y,
+          origTx: state.graphTransform.x,
+          origTy: state.graphTransform.y,
+        };
+      }
+    });
+
+    window.addEventListener("mousemove", (ev) => {
+      if (!dragMode) return;
+      const pt = svgPoint(ev.clientX, ev.clientY);
+      if (dragMode.type === "node") {
+        const dx = (pt.x - dragMode.startX) / state.graphTransform.k;
+        const dy = (pt.y - dragMode.startY) / state.graphTransform.k;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMode.moved = true;
+        state.graphPositions.set(dragMode.id, { x: dragMode.origX + dx, y: dragMode.origY + dy });
+        renderRelationsGraph(getFilteredRelations(), false);
+      } else if (dragMode.type === "pan") {
+        state.graphTransform.x = dragMode.origTx + (pt.x - dragMode.startX);
+        state.graphTransform.y = dragMode.origTy + (pt.y - dragMode.startY);
+        vp.setAttribute("transform", `translate(${state.graphTransform.x}, ${state.graphTransform.y}) scale(${state.graphTransform.k})`);
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (dragMode && dragMode.type === "node" && !dragMode.moved) {
+        state.selectedNodeId = state.selectedNodeId === dragMode.id ? null : dragMode.id;
+        renderRelationsGraph(getFilteredRelations(), false);
+      }
+      dragMode = null;
+    });
+
+    svg.addEventListener("dblclick", (ev) => {
+      const nodeEl = ev.target.closest(".graph-node");
+      if (nodeEl) {
+        openEntityDrawer(nodeEl.dataset.nodeId);
+      }
+    });
+
+    svg.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const pt = svgPoint(ev.clientX, ev.clientY);
+      const factor = ev.deltaY < 0 ? 1.12 : 0.89;
+      const nextK = Math.min(3.5, Math.max(0.35, state.graphTransform.k * factor));
+      const ratio = nextK / state.graphTransform.k;
+      state.graphTransform.x = pt.x - (pt.x - state.graphTransform.x) * ratio;
+      state.graphTransform.y = pt.y - (pt.y - state.graphTransform.y) * ratio;
+      state.graphTransform.k = nextK;
+      vp.setAttribute("transform", `translate(${state.graphTransform.x}, ${state.graphTransform.y}) scale(${state.graphTransform.k})`);
+    }, { passive: false });
+  }
+
+  function bindGlobalEvents() {
+    document.getElementById("tabs-bar").addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".tab-btn");
+      if (btn) switchTab(btn.dataset.tab);
+    });
+
+    document.getElementById("btn-toggle-theme").addEventListener("click", () => {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      if (isDark) document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", "dark");
+      try { localStorage.setItem("ddnovel_web_theme", isDark ? "light" : "dark"); } catch (_) {}
+      updateThemeBtn();
+    });
+
+    document.getElementById("btn-toggle-secrets").addEventListener("click", () => {
+      state.showSecrets = !state.showSecrets;
+      const btn = document.getElementById("btn-toggle-secrets");
+      btn.textContent = state.showSecrets ? "👁 机密：显示" : "👁 机密：隐藏";
+      btn.classList.toggle("active-toggle", state.showSecrets);
+      renderThreads();
+      renderHistoryAndSettings();
+      const drawer = document.getElementById("entity-drawer");
+      if (drawer.classList.contains("open") && drawer.dataset.currentEntity) {
+        openEntityDrawer(drawer.dataset.currentEntity);
+      }
+    });
+
+    document.getElementById("btn-refresh").addEventListener("click", refreshFromServer);
+
+    // Quick search
+    const gInput = document.getElementById("global-search");
+    const gMenu = document.getElementById("global-search-results");
+    gInput.addEventListener("input", () => {
+      const q = gInput.value.trim().toLowerCase();
+      if (!q || !DATA) {
+        gMenu.classList.remove("open");
+        return;
+      }
+      const matches = [];
+      for (const ent of Object.values(DATA.entities || {})) {
+        const hay = [ent.id, ent.name, ...(ent.aliases || [])].join(" ").toLowerCase();
+        if (hay.includes(q)) matches.push(ent);
+      }
+      for (const c of DATA.characters || []) {
+        if (!(DATA.entities || {})[c.id] && c.id.toLowerCase().includes(q)) {
+          matches.push({ id: c.id, name: c.name, category: "character" });
+        }
+      }
+      if (matches.length === 0) {
+        gMenu.innerHTML = `<div class="quick-search-item" style="color:var(--text-subtle)">未找到匹配实体</div>`;
+      } else {
+        gMenu.innerHTML = matches.slice(0, 12).map((m) => `
+          <div class="quick-search-item" data-entity-id="${escapeHtml(m.id)}">
+            <span><strong>${escapeHtml(m.name)}</strong> <span class="mono" style="color:var(--text-subtle)">${escapeHtml(m.id)}</span></span>
+            <span class="badge badge-neutral">${escapeHtml(CAT_LABELS[m.category] || m.category)}</span>
+          </div>`).join("");
+      }
+      gMenu.classList.add("open");
+    });
+
+    document.addEventListener("click", (ev) => {
+      if (!ev.target.closest(".quick-search-wrap")) {
+        gMenu.classList.remove("open");
+      }
+
+      const secretTarget = ev.target.closest("[data-secret-key]");
+      if (secretTarget && !state.showSecrets) {
+        const key = secretTarget.dataset.secretKey;
+        if (state.revealedIds.has(key)) state.revealedIds.delete(key);
+        else state.revealedIds.add(key);
+        secretTarget.classList.toggle("secret-masked", !state.revealedIds.has(key));
+        return;
+      }
+
+      const jumpEl = ev.target.closest("[data-jump-tab]");
+      if (jumpEl) {
+        switchTab(jumpEl.dataset.jumpTab);
+        return;
+      }
+
+      if (ev.target.id === "graph-clear-sel") {
+        state.selectedNodeId = null;
+        renderRelationsGraph(getFilteredRelations(), false);
+        return;
+      }
+
+      const entityEl = ev.target.closest("[data-entity-id]");
+      if (entityEl) {
+        gMenu.classList.remove("open");
+        const eid = entityEl.dataset.entityId;
+        document.getElementById("entity-drawer").dataset.currentEntity = eid;
+        openEntityDrawer(eid);
+      }
+    });
+
+    document.getElementById("drawer-close").addEventListener("click", closeEntityDrawer);
+    document.getElementById("drawer-backdrop").addEventListener("click", closeEntityDrawer);
+    window.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") closeEntityDrawer();
+    });
+
+    // Character filters
+    bindPillGroup("char-status-pills", (val) => { state.charStatus = val; renderCharacters(); });
+    document.getElementById("char-search").addEventListener("input", (ev) => { state.charSearch = ev.target.value; renderCharacters(); });
+    document.getElementById("char-loc-filter").addEventListener("change", (ev) => { state.charLoc = ev.target.value; renderCharacters(); });
+
+    // Relation filters
+    bindPillGroup("rel-mode-pills", (val) => {
+      state.relMode = val;
+      document.getElementById("rel-chapter-controls").style.display = val === "at_chapter" ? "inline-flex" : "none";
+      renderRelations(false);
+    });
+    const slider = document.getElementById("rel-ch-slider");
+    const updateRelChapter = (nextCh) => {
+      const maxCh = Number(slider.max || 1);
+      state.relChapter = Math.max(1, Math.min(maxCh, nextCh));
+      slider.value = String(state.relChapter);
+      document.getElementById("rel-ch-label").textContent = `第 ${state.relChapter} 章`;
+      renderRelations(false);
+    };
+    slider.addEventListener("input", (ev) => updateRelChapter(Number(ev.target.value)));
+    document.getElementById("rel-ch-prev").addEventListener("click", () => updateRelChapter(state.relChapter - 1));
+    document.getElementById("rel-ch-next").addEventListener("click", () => updateRelChapter(state.relChapter + 1));
+    document.getElementById("rel-entity-filter").addEventListener("change", (ev) => { state.relEntity = ev.target.value; renderRelations(false); });
+    document.getElementById("rel-search").addEventListener("input", (ev) => { state.relSearch = ev.target.value; renderRelations(false); });
+    document.getElementById("rel-reset-view").addEventListener("click", () => {
+      state.graphTransform = { x: 0, y: 0, k: 1 };
+      state.selectedNodeId = null;
+      renderRelationsGraph(getFilteredRelations(), false);
+    });
+    document.getElementById("rel-relayout").addEventListener("click", () => {
+      state.graphTransform = { x: 0, y: 0, k: 1 };
+      renderRelationsGraph(getFilteredRelations(), true);
+    });
+
+    // Thread filters
+    bindPillGroup("thread-status-pills", (val) => { state.threadStatus = val; renderThreads(); });
+    document.getElementById("thread-search").addEventListener("input", (ev) => { state.threadSearch = ev.target.value; renderThreads(); });
+
+    // Faction filters
+    bindPillGroup("fac-status-pills", (val) => { state.facStatus = val; renderFactions(); });
+    document.getElementById("fac-search").addEventListener("input", (ev) => { state.facSearch = ev.target.value; renderFactions(); });
+
+    // History & Settings filters
+    bindPillGroup("hist-subtab-pills", (val) => { state.histSubtab = val; renderHistoryAndSettings(); });
+    document.getElementById("hist-vol-filter").addEventListener("change", (ev) => { state.histVol = ev.target.value; renderHistoryAndSettings(); });
+    document.getElementById("setting-cat-filter").addEventListener("change", (ev) => { state.settingCat = ev.target.value; renderHistoryAndSettings(); });
+    document.getElementById("hist-search").addEventListener("input", (ev) => { state.histSearch = ev.target.value; renderHistoryAndSettings(); });
+
+    initGraphInteractions();
+  }
+
+  initTheme();
+  bindGlobalEvents();
+  renderAll(true);
+})();
+</script>
+</body>
+</html>

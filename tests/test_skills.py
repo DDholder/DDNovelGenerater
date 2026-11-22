@@ -30,6 +30,7 @@ EXPECTED_ROLES = (
     "dd-state-curator",
     "dd-character-illustrator",
     "dd-scene-cg-illustrator",
+    "dd-reader-packager",
 )
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -90,7 +91,10 @@ def test_skill_file_exists_and_frontmatter_conforms_to_opencode_and_dsh_specs(ro
 
     allowed_tools = fm.get("allowed-tools")
     assert isinstance(allowed_tools, list) and len(allowed_tools) >= 2
-    assert all(isinstance(t, str) and t.startswith("novel_") for t in allowed_tools)
+    assert all(
+        isinstance(t, str) and t.startswith(("novel_", "ddbook_"))
+        for t in allowed_tools
+    )
 
     # 2. 扩展 metadata 结构校验
     meta = fm.get("metadata")
@@ -488,3 +492,45 @@ def test_scene_cg_illustrator_skill_domain_requirements():
         "image-generator",
     ):
         assert required_token in body, f"dd-scene-cg-illustrator 缺少关键规范内容: {required_token}"
+
+
+def test_reader_packager_skill_domain_requirements():
+    fm, body = _parse_skill_markdown(TEMPLATES_SKILLS_DIR / "dd-reader-packager" / "SKILL.md")
+
+    assert fm["metadata"]["context_isolation"] is False
+    allowed = set(fm["allowed-tools"])
+    assert {
+        "novel_reader_plan_chapter",
+        "novel_reader_export",
+        "novel_reader_validate_pack",
+        "ddbook_init_project",
+        "ddbook_draft_chapter_from_text",
+        "ddbook_upsert_chapter",
+        "ddbook_sync_gallery",
+        "ddbook_upsert_codex",
+        "ddbook_generate_placeholder_assets",
+        "ddbook_preview_stage",
+        "ddbook_preview_codex",
+        "ddbook_validate_target",
+        "ddbook_pack_book",
+        "ddbook_build_patch",
+    } <= allowed
+
+    for required_token in (
+        "DDNovelReader",
+        ".ddbook",
+        ".ddpatch",
+        "模式 A",
+        "模式 B",
+        "视觉资源需求清单",
+        "强制人工确认门禁",
+        "dd-character-illustrator",
+        "dd-scene-cg-illustrator",
+        "ddnovel reader plan",
+        "ddnovel reader export",
+        "ddnovel reader validate",
+        "ddnovel reader pack",
+        "unlock_gallery_id",
+        "ZIP Store",
+    ):
+        assert required_token in body, f"dd-reader-packager 缺少关键规范内容: {required_token}"

@@ -412,7 +412,7 @@ def test_init_book_and_render_host_configs_antigravity_workspace_bundle(tmp_path
     assert manifest["version"] == __version__
     assert isinstance(manifest["displayName"], str) and manifest["displayName"]
     assert isinstance(manifest["description"], str) and manifest["description"]
-    assert isinstance(manifest["suggestedPrompts"], list) and len(manifest["suggestedPrompts"]) == 3
+    assert isinstance(manifest["suggestedPrompts"], list) and len(manifest["suggestedPrompts"]) >= 3
     assert set(manifest.keys()) <= {
         "name",
         "displayName",

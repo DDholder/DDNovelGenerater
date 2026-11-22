@@ -2,10 +2,11 @@
   "name": "ddnovel",
   "displayName": "DDNovel 长篇小说创作引擎",
   "version": "0.1.0",
-  "description": "DDNovelGenerater 长篇小说创作工程底座：文账分离四维真源、FastMCP 工具服务端、六大专项渐进式技能（含角色立绘与章节场景 CG 绘制）与空白上下文独立执笔子代理。",
+  "description": "DDNovelGenerater 长篇小说创作工程底座：文账分离四维真源、FastMCP 工具服务端、七大专项渐进式技能（含角色立绘、章节场景 CG 与 DDNovelReader 伴读作品包适配打包）与空白上下文独立执笔子代理。",
   "suggestedPrompts": [
     "作为设定师（dd-setting-architect），帮我梳理世界观与主角设定卡并同步索引",
     "作为结构规划师（dd-structure-planner），运行伏笔雷达并规划下一章蓝图与单章写作包",
-    "委派独立执笔子代理（dd-chapter-writer）读取单章写作包撰写初稿，完成后交由场记体检"
+    "委派独立执笔子代理（dd-chapter-writer）读取单章写作包撰写初稿，完成后交由场记体检",
+    "作为伴读作品包导演（dd-reader-packager），单独设计第 1 章的 DDNovelReader 演出并列出所需立绘/场景/CG 资源清单"
   ]
 }

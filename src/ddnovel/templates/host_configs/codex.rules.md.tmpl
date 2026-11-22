@@ -18,7 +18,7 @@
    - **作者中途修改或删除既有设定**前，必须先执行 `novel_setting_impact`（或 `ddnovel setting impact`）五维防吃书扫描，确认影响面后再改动并调用 `novel_sync_index` 热同步索引。
 3. **禁止手动篡改派生缓存**：`.ddnovel/index.sqlite` 为派生检索缓存，只通过 `novel_sync_index` 或 `ddnovel index sync/rebuild` 维护。
 
-## 4. 六大专项技能协同与 Step 4 执笔隔离原则
+## 4. 七大专项技能协同与 Step 4 执笔隔离原则
 
 1. **Step 1 · 设定维护 (`dd-setting-architect`)**：按需读取 `00_作者设定/` 原稿并执行“三留三剥离”抽象提炼，维护 `01_设定集/<分类>/<id>-<对象名>.md` 与三级切片（`## [核心]` / `## [专题: X]` / `## [机密]`）。**其余技能默认严禁扫读 `00_作者设定/`**。
 2. **Step 2 & Step 3 · 结构规划与写作包编译 (`dd-structure-planner`)**：先运行 `novel_foreshadow_radar` 巡检伏笔，完成三级结构蓝图后调用 `novel_build_packet` 编译 `04_创作/写作包/第XXXX章_写作包.md`。
@@ -28,3 +28,5 @@
 5. **视觉衍生 · 角色立绘 (`dd-character-illustrator`) 与章节场景 CG (`dd-scene-cg-illustrator`)**：
    - 绘制角色图时读取 `01_设定集/人物/` 与当前状态，套用明亮通透、柔光半厚涂的商业级日系二次元角色立绘画风出图并按角色归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/`。
    - 绘制章节场景 CG 时读取指定章节正文与关联设定，**必须先精选 3～5 个候选场景呈报给作者确认**，确认后再套用轻小说/游戏剧情 CG 画风逐一绘制并按分卷归档至 `04_创作/插画/场景CG/第XX卷/`。
+6. **阅读器交付 · DDNovelReader 作品包适配 (`dd-reader-packager`)**：
+   - 协同 `novel_reader_*` 与 `ddbook_*` MCP（或 `ddnovel reader` CLI）将当前全书或单独一章导出封装为合规 `.ddbook` / `.ddpatch`；单章设计前**必须先提出视觉资源需求清单（立绘/差分、头像、背景、CG 及已有/缺失状态）**待作者确认。

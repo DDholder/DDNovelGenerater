@@ -28,9 +28,13 @@ from ddnovel.core import (
     LifecycleManager,
     PacketBuilder,
     ProgressiveParser,
+    ReaderExporter,
     SqliteIndexer,
+    build_reader_patch,
     estimate_tokens,
     lint_model_setting_doc,
+    pack_reader_book,
+    validate_reader_target,
 )
 from ddnovel.core.parser import (
     CATEGORY_PREFIX_MAP,
@@ -51,6 +55,7 @@ from ddnovel.core.paths import (
     resolve_draft_file,
     resolve_facts_file,
     resolve_packet_file,
+    resolve_reader_pack_dir,
     resolve_relations_file,
     resolve_setting_file,
     resolve_settings_root,
@@ -118,6 +123,9 @@ MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
     "novel_drop_thread",
     "novel_compact_history",
     "novel_audit_consistency",
+    "novel_reader_plan_chapter",
+    "novel_reader_export",
+    "novel_reader_validate_pack",
 )
 
 _CATEGORY_DIR_MAP: Final[dict[SettingCategory, str]] = {
@@ -1651,6 +1659,257 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
             )
         except (FileNotFoundError, KeyError, ValueError, ValidationError) as exc:
             return _format_error(exc, tool_name="novel_audit_consistency")
+
+    @mcp.tool(name="novel_export_txt")
+    async def novel_export_txt(
+        output_path: str | None = None,
+        volume_id: str | None = None,
+        start_chapter: int | None = None,
+        end_chapter: int | None = None,
+        include_book_title: bool = True,
+        strip_markdown: bool = True,
+        dry_run: bool = False,
+        book_dir: str | None = None,
+    ) -> str:
+        """将所有定稿正文按章序合并打包为单个 UTF-8 TXT 文件。"""
+        try:
+            root = resolve_book_dir(book_dir, default_book_dir)
+            with LifecycleManager(root) as mgr:
+                res = mgr.export_manuscript_txt(
+                    output_path=output_path,
+                    volume_id=volume_id,
+                    start_chapter=start_chapter,
+                    end_chapter=end_chapter,
+                    include_book_title=include_book_title,
+                    strip_markdown=strip_markdown,
+                    dry_run=dry_run,
+                )
+            mode_tag = "[预览模式]" if dry_run else "[已导出]"
+            return _format_response(
+                {
+                    "ok": True,
+                    "tool": "novel_export_txt",
+                    "output_path": res.output_path,
+                    "chapter_count": res.chapter_count,
+                    "chapters": res.chapters,
+                    "source_paths": res.source_paths,
+                    "total_chars": res.total_chars,
+                    "dry_run": res.dry_run,
+                    "summary": (
+                        f"📦 {mode_tag} 已合并 {res.chapter_count} 章定稿正文至 `{res.output_path}` "
+                        f"({res.total_chars:,} 字符)"
+                    ),
+                }
+            )
+        except (FileNotFoundError, KeyError, ValueError, ValidationError) as exc:
+            return _format_error(exc, tool_name="novel_export_txt")
+
+    # ------------------------------------------------------------------
+    # 功能域 12: DDNovelReader 作品包适配与单章资源规划 (reader_plan / export / validate_pack)
+    # ------------------------------------------------------------------
+
+    @mcp.tool(name="novel_reader_plan_chapter")
+    async def novel_reader_plan_chapter(
+        chapter: int | None = None,
+        output_dir: str | None = None,
+        include_drafts: bool = True,
+        save_plan: bool = False,
+        book_dir: str | None = None,
+    ) -> str:
+        """为指定章节（或当前全书）分析并提出 DDNovelReader 伴读演出方案与视觉资源需求清单（立绘/差分/场景/CG/头像/封面）。"""
+        try:
+            root = resolve_book_dir(book_dir, default_book_dir)
+            exporter = ReaderExporter(root)
+            if chapter is not None:
+                plan = exporter.plan_chapter_resources(
+                    chapter,
+                    output_dir=output_dir,
+                    include_drafts=include_drafts,
+                    save_plan=save_plan,
+                )
+                payload = plan.to_dict()
+                counts = payload["counts"]
+                return _format_response(
+                    {
+                        "ok": True,
+                        "tool": "novel_reader_plan_chapter",
+                        "scope": "chapter",
+                        **payload,
+                        "summary": (
+                            f"🎬 第 {plan.chapter} 章《{plan.title}》伴读资源需求规划完成："
+                            f"共 {counts['total']} 项资源（已有可复用 {counts['ready']} / "
+                            f"待绘差分 {counts['reuse_base']} / 缺失待绘 {counts['missing']}）"
+                        ),
+                    }
+                )
+            plans = exporter.plan_book_resources(
+                output_dir=output_dir,
+                include_drafts=include_drafts,
+                save_plan=save_plan,
+            )
+            serialized = [p.to_dict() for p in plans]
+            total_missing = sum(p["counts"]["missing"] for p in serialized)
+            total_ready = sum(p["counts"]["ready"] for p in serialized)
+            return _format_response(
+                {
+                    "ok": True,
+                    "tool": "novel_reader_plan_chapter",
+                    "scope": "book",
+                    "chapter_count": len(serialized),
+                    "chapters": serialized,
+                    "summary": (
+                        f"🎬 全书 {len(serialized)} 章伴读资源需求规划完成："
+                        f"已有可复用 {total_ready} 项 / 缺失待绘 {total_missing} 项"
+                    ),
+                }
+            )
+        except (FileNotFoundError, KeyError, ValueError, ValidationError, RuntimeError) as exc:
+            return _format_error(exc, tool_name="novel_reader_plan_chapter")
+
+    @mcp.tool(name="novel_reader_export")
+    async def novel_reader_export(
+        chapter: int | None = None,
+        output_dir: str | None = None,
+        include_drafts: bool = False,
+        pack_ddbook: bool = True,
+        patch_from: str | None = None,
+        generate_placeholders: bool = True,
+        strict_validate: bool = True,
+        book_id: str | None = None,
+        revision: int | None = None,
+        accent_color: str = "#6CE5E8",
+        reader_dir: str | None = None,
+        book_dir: str | None = None,
+    ) -> str:
+        """导出当前全书（chapter=None）或单独导出/增量更新指定一章（chapter=N）为适配 DDNovelReader 的作品源目录与 .ddbook/.ddpatch。"""
+        try:
+            root = resolve_book_dir(book_dir, default_book_dir)
+            exporter = ReaderExporter(root)
+            if chapter is not None:
+                res = exporter.export_chapter(
+                    chapter,
+                    output_dir=output_dir,
+                    include_drafts=include_drafts or True,
+                    pack_ddbook=pack_ddbook,
+                    patch_from=patch_from,
+                    generate_placeholders=generate_placeholders,
+                    strict_validate=strict_validate,
+                    reader_dir=reader_dir,
+                    book_id=book_id,
+                    accent_color=accent_color,
+                )
+            else:
+                res = exporter.export_book(
+                    output_dir=output_dir,
+                    include_drafts=include_drafts,
+                    pack_ddbook=pack_ddbook,
+                    patch_from=patch_from,
+                    generate_placeholders=generate_placeholders,
+                    strict_validate=strict_validate,
+                    reader_dir=reader_dir,
+                    book_id=book_id,
+                    revision=revision,
+                    accent_color=accent_color,
+                )
+            dumped = res.to_dict()
+            val_ok = bool((res.validation or {}).get("ok", False))
+            mode_label = f"单章(第 {chapter} 章)" if chapter is not None else f"全书({len(res.exported_chapters)} 章)"
+            return _format_response(
+                {
+                    "ok": True,
+                    "tool": "novel_reader_export",
+                    **dumped,
+                    "summary": (
+                        f"📦 DDNovelReader {mode_label}导出完成 (`{res.source_dir}`)，"
+                        f"校验={'✅ 通过' if val_ok else '⚠️ 未通过'} ({res.reader_tool_used})，"
+                        f"真实素材 {len(res.copied_assets)} / 占位图 {len(res.generated_placeholders)}"
+                        + (f"，已打包 `{res.ddbook_path}`" if res.ddbook_path else "")
+                    ),
+                }
+            )
+        except (FileNotFoundError, KeyError, ValueError, ValidationError, RuntimeError) as exc:
+            return _format_error(exc, tool_name="novel_reader_export")
+
+    @mcp.tool(name="novel_reader_validate_pack")
+    async def novel_reader_validate_pack(
+        source_dir: str | None = None,
+        output_file: str | None = None,
+        patch_from: str | None = None,
+        pack: bool = False,
+        strict: bool = True,
+        reader_dir: str | None = None,
+        book_dir: str | None = None,
+    ) -> str:
+        """对 DDNovelReader 作品源目录或归档执行 Protocol v1.0 严格校验，并按需封装合规 ZIP Store .ddbook 或增量 .ddpatch。"""
+        try:
+            root = resolve_book_dir(book_dir, default_book_dir)
+            default_pack_root = resolve_reader_pack_dir(root)
+            resolved_src = (
+                Path(source_dir).resolve()
+                if source_dir is not None and source_dir.strip()
+                else (default_pack_root / "source")
+            )
+            if patch_from is not None and patch_from.strip():
+                out_patch = (
+                    Path(output_file).resolve()
+                    if output_file is not None and output_file.strip()
+                    else (default_pack_root / f"{resolved_src.parent.name}.ddpatch")
+                )
+                packed_path, val = build_reader_patch(
+                    patch_from,
+                    resolved_src,
+                    out_patch,
+                    auto_bump_revision=True,
+                    strict=strict,
+                    reader_dir=reader_dir,
+                )
+                return _format_response(
+                    {
+                        "ok": True,
+                        "tool": "novel_reader_validate_pack",
+                        "action": "ddpatch",
+                        "output_file": packed_path.as_posix(),
+                        "validation": val.to_dict(),
+                        "summary": f"📦 已构建并通过校验 .ddpatch 增量补丁：`{packed_path.as_posix()}`",
+                    }
+                )
+            if pack:
+                out_book = (
+                    Path(output_file).resolve()
+                    if output_file is not None and output_file.strip()
+                    else (default_pack_root / "book.ddbook")
+                )
+                packed_path, val = pack_reader_book(
+                    resolved_src,
+                    out_book,
+                    strict=strict,
+                    reader_dir=reader_dir,
+                )
+                return _format_response(
+                    {
+                        "ok": True,
+                        "tool": "novel_reader_validate_pack",
+                        "action": "ddbook",
+                        "output_file": packed_path.as_posix(),
+                        "validation": val.to_dict() if val is not None else None,
+                        "summary": f"📦 已打包并通过严格校验 .ddbook 作品包：`{packed_path.as_posix()}`",
+                    }
+                )
+            val = validate_reader_target(resolved_src, strict=strict, reader_dir=reader_dir)
+            return _format_response(
+                {
+                    "ok": True,
+                    "tool": "novel_reader_validate_pack",
+                    "action": "validate",
+                    "validation": val.to_dict(),
+                    "summary": (
+                        f"🩺 DDNovelReader 校验{'✅ 通过' if val.ok else '❌ 未通过'} "
+                        f"({val.tool}: errors={val.errors}, warnings={val.warnings}, infos={val.infos})"
+                    ),
+                }
+            )
+        except (FileNotFoundError, KeyError, ValueError, ValidationError, RuntimeError) as exc:
+            return _format_error(exc, tool_name="novel_reader_validate_pack")
 
     return mcp
 

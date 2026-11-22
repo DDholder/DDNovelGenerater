@@ -850,3 +850,60 @@ def test_audit_chapter_flags_setting_concrete_leak_warning(tmp_path: Path) -> No
             iss.level == IssueLevel.WARNING and iss.code == "SETTING_CONCRETE_LEAK"
             for iss in book_report.issues
         )
+
+
+def test_export_manuscript_txt_merges_sorted_chapters_and_filters(tmp_path: Path) -> None:
+    book_dir = tmp_path / "zh_book"
+    book_dir.mkdir(parents=True)
+    (book_dir / "小说配置.yaml").write_text("title: 霜月战线\nauthor: 测试作者\n", encoding="utf-8")
+    ms_v1 = book_dir / "04_创作" / "定稿" / "第01卷"
+    ms_v2 = book_dir / "04_创作" / "定稿" / "第02卷"
+    ms_v1.mkdir(parents=True)
+    ms_v2.mkdir(parents=True)
+
+    (ms_v1 / "第0002章-暗潮.md").write_text(
+        "---\nchapter: 2\n---\n\n# 第 2 章 暗潮\n\n第二章正文。\n",
+        encoding="utf-8",
+    )
+    (ms_v1 / "第0001章-启程.md").write_text(
+        "# 第 1 章 启程\n\n第一章正文。\n",
+        encoding="utf-8",
+    )
+    (ms_v2 / "第0003章-破晓.md").write_text(
+        "# 第 3 章 破晓\n\n第三章正文。\n",
+        encoding="utf-8",
+    )
+    (ms_v1 / "README.md").write_text("# 说明\n不应被导出\n", encoding="utf-8")
+
+    with LifecycleManager(book_dir) as lm:
+        dry_res = lm.export_manuscript_txt(dry_run=True)
+        assert dry_res.dry_run is True
+        assert dry_res.chapters == [1, 2, 3]
+        assert not (book_dir / dry_res.output_path).exists()
+
+        full_res = lm.export_manuscript_txt()
+        assert full_res.dry_run is False
+        assert full_res.chapter_count == 3
+        assert full_res.chapters == [1, 2, 3]
+        out_file = book_dir / full_res.output_path
+        assert out_file.is_file()
+        content = out_file.read_text(encoding="utf-8")
+        assert content.startswith("《霜月战线》\n")
+        assert "chapter: 2" not in content
+        assert "# 第 1 章" not in content
+        assert "第 1 章 启程\n\n第一章正文。" in content
+        assert "不应被导出" not in content
+        assert content.index("第 1 章 启程") < content.index("第 2 章 暗潮") < content.index("第 3 章 破晓")
+
+        vol1_res = lm.export_manuscript_txt(
+            volume_id="vol_01",
+            start_chapter=2,
+            end_chapter=2,
+            include_book_title=False,
+            strip_markdown=False,
+            output_path=tmp_path / "custom_v1.txt",
+        )
+        assert vol1_res.chapters == [2]
+        custom_text = (tmp_path / "custom_v1.txt").read_text(encoding="utf-8")
+        assert "《霜月战线》" not in custom_text
+        assert custom_text.startswith("# 第 2 章 暗潮")

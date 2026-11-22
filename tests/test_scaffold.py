@@ -13,6 +13,7 @@ def test_subpackages_importable():
     import ddnovel.core
     import ddnovel.core.schemas
     import ddnovel.templates  # noqa: F401
+    import ddnovel.web  # noqa: F401
 
 
 def test_cli_version():

@@ -49,6 +49,7 @@ from ddnovel.core.paths import (
     format_volume_stem,
     resolve_config_path,
 )
+from ddnovel.core.reader_export import resolve_reader_mcp_command
 from ddnovel.core.schemas import (
     HostKind,
     NovelConfig,
@@ -61,6 +62,7 @@ SKILL_ROLES: Final[tuple[str, ...]] = (
     "dd-state-curator",
     "dd-character-illustrator",
     "dd-scene-cg-illustrator",
+    "dd-reader-packager",
 )
 
 BOOK_SKELETON_DIRS: Final[tuple[str, ...]] = (
@@ -84,6 +86,7 @@ BOOK_SKELETON_DIRS: Final[tuple[str, ...]] = (
 
 _DEFAULT_TEMPLATES_DIR: Final[Path] = Path(__file__).resolve().parent
 ANTIGRAVITY_PLUGIN_NAME: Final[str] = "ddnovel"
+READER_MCP_SERVER_NAME: Final[str] = "ddnovel-reader"
 DEFAULT_ANTIGRAVITY_PLUGINS_DIR: Final[Path] = Path("~/.gemini/config/plugins")
 DEFAULT_CODEX_HOME_DIR: Final[Path] = Path("~/.codex")
 DEFAULT_AGENTS_SKILLS_DIR: Final[Path] = Path("~/.agents/skills")
@@ -148,8 +151,10 @@ def _upsert_codex_mcp_toml(
     mcp_command: tuple[str, ...],
     book_dir_posix: str | None,
     overwrite: bool,
+    server_name: str = ANTIGRAVITY_PLUGIN_NAME,
+    managed_comment: str = _CODEX_MANAGED_COMMENT,
 ) -> str | None:
-    """在 Codex / ChatGPT Desktop 的 config.toml 中无损合并 [mcp_servers.ddnovel] 配置段。"""
+    """在 Codex / ChatGPT Desktop 的 config.toml 中无损合并 [mcp_servers.<server_name>] 配置段。"""
     stripped = existing_text.strip()
     if stripped:
         try:
@@ -159,20 +164,20 @@ def _upsert_codex_mcp_toml(
                 return None
             parsed = {}
         mcp_servers = parsed.get("mcp_servers")
-        if not overwrite and isinstance(mcp_servers, dict) and ANTIGRAVITY_PLUGIN_NAME in mcp_servers:
+        if not overwrite and isinstance(mcp_servers, dict) and server_name in mcp_servers:
             return None
 
-    # 移除既有的 [mcp_servers.ddnovel] 及其子表，完整保留用户其他配置与注释
+    # 移除既有的 [mcp_servers.<server_name>] 及其子表，完整保留用户其他配置与注释
     kept_lines: list[str] = []
     skip_section = False
     for line in existing_text.replace("\r\n", "\n").splitlines():
         match = _TOML_TABLE_RE.match(line)
         if match:
             table_key = _normalize_toml_table_key(match.group(1))
-            if table_key == f"mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}" or table_key.startswith(
-                f"mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}."
+            if table_key == f"mcp_servers.{server_name}" or table_key.startswith(
+                f"mcp_servers.{server_name}."
             ):
-                if kept_lines and kept_lines[-1].strip() == _CODEX_MANAGED_COMMENT:
+                if kept_lines and kept_lines[-1].strip() == managed_comment:
                     kept_lines.pop()
                 skip_section = True
                 continue
@@ -184,8 +189,8 @@ def _upsert_codex_mcp_toml(
 
     args_toml = ", ".join(json.dumps(arg, ensure_ascii=False) for arg in mcp_command[1:])
     block_lines = [
-        _CODEX_MANAGED_COMMENT,
-        f"[mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}]",
+        managed_comment,
+        f"[mcp_servers.{server_name}]",
         f"command = {json.dumps(mcp_command[0], ensure_ascii=False)}",
         f"args = [{args_toml}]",
     ]
@@ -196,7 +201,7 @@ def _upsert_codex_mcp_toml(
         block_lines.extend(
             [
                 "",
-                f"[mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}.env]",
+                f"[mcp_servers.{server_name}.env]",
                 f"DDNOVEL_BOOK_DIR = {json.dumps(book_dir_posix, ensure_ascii=False)}",
             ]
         )
@@ -298,6 +303,7 @@ class ProjectInitializer:
         templates_dir: Path | str | None = None,
         skills_source_dir: Path | str | None = None,
         mcp_command: Sequence[str] | str | None = None,
+        reader_dir: Path | str | None = None,
     ) -> None:
         self.templates_dir: Path = (
             Path(templates_dir).resolve()
@@ -313,6 +319,14 @@ class ProjectInitializer:
         )
         self._has_explicit_mcp_command: bool = mcp_command is not None
         self.mcp_command: tuple[str, ...] = self._normalize_mcp_command(mcp_command)
+        self.reader_dir: Path | None = (
+            Path(reader_dir).expanduser().resolve()
+            if reader_dir is not None and str(reader_dir).strip()
+            else None
+        )
+        self.reader_mcp_command: tuple[str, ...] | None = (
+            resolve_reader_mcp_command(self.reader_dir) if self.reader_dir is not None else None
+        )
 
     @staticmethod
     def _normalize_mcp_command(mcp_command: Sequence[str] | str | None) -> tuple[str, ...]:
@@ -781,6 +795,12 @@ class ProjectInitializer:
             "environment": {"DDNOVEL_BOOK_DIR": book_dir_posix},
             "enabled": True,
         }
+        if self.reader_mcp_command is not None:
+            mcp_section[READER_MCP_SERVER_NAME] = {
+                "type": "local",
+                "command": list(self.reader_mcp_command),
+                "enabled": True,
+            }
         target_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return target_path
 
@@ -818,6 +838,19 @@ class ProjectInitializer:
                     cfg["args"] = cmd_args
                     cfg["cwd"] = book_dir_posix
                     cfg["env"] = {"DDNOVEL_BOOK_DIR": book_dir_posix}
+            if self.reader_mcp_command is not None and not any(
+                isinstance(e, dict) and e.get("id") == "mcp-ddnovel-reader" for e in inserts
+            ):
+                inserts.append(
+                    {
+                        "id": "mcp-ddnovel-reader",
+                        "type": "mcp",
+                        "config": {
+                            "command": self.reader_mcp_command[0],
+                            "args": list(self.reader_mcp_command[1:]),
+                        },
+                    }
+                )
 
         header = "# DDNovelGenerater MCP patch for DeepSeek Harness (DSH / Cordis)\n"
         target_path.write_text(header + _dump_yaml(patch_data), encoding="utf-8")
@@ -861,6 +894,12 @@ class ProjectInitializer:
             "args": list(self.mcp_command[1:]),
             "env": {"DDNOVEL_BOOK_DIR": book_dir_posix},
         }
+        if self.reader_mcp_command is not None:
+            servers[READER_MCP_SERVER_NAME] = {
+                "type": "stdio",
+                "command": self.reader_mcp_command[0],
+                "args": list(self.reader_mcp_command[1:]),
+            }
         target_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return target_path
 
@@ -1029,6 +1068,11 @@ class ProjectInitializer:
                 server_entry["env"] = {"DDNOVEL_BOOK_DIR": book_dir_posix}
 
             servers[ANTIGRAVITY_PLUGIN_NAME] = server_entry
+            if self.reader_mcp_command is not None:
+                servers[READER_MCP_SERVER_NAME] = {
+                    "command": self.reader_mcp_command[0],
+                    "args": list(self.reader_mcp_command[1:]),
+                }
             mcp_path.write_text(
                 json.dumps(mcp_data, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
@@ -1123,6 +1167,18 @@ class ProjectInitializer:
             book_dir_posix=book_dir_posix,
             overwrite=overwrite,
         )
+        if self.reader_mcp_command is not None:
+            base_for_reader = merged_toml if merged_toml is not None else existing_toml
+            reader_merged = _upsert_codex_mcp_toml(
+                base_for_reader,
+                mcp_command=self.reader_mcp_command,
+                book_dir_posix=None,
+                overwrite=overwrite,
+                server_name=READER_MCP_SERVER_NAME,
+                managed_comment="# DDNovelReader MCP server (.ddbook / .ddpatch)",
+            )
+            if reader_merged is not None:
+                merged_toml = reader_merged
         if merged_toml is not None:
             config_path.write_text(merged_toml, encoding="utf-8")
             written_files.append(config_path)
@@ -1190,10 +1246,11 @@ def install_antigravity_plugin(
     *,
     plugin_dir: Path | str | None = None,
     mcp_command: Sequence[str] | str | None = None,
+    reader_dir: Path | str | None = None,
     overwrite: bool = True,
 ) -> GlobalPluginInstallResult:
     """快捷安装或更新本机全局 Antigravity ``ddnovel`` 插件。"""
-    return ProjectInitializer(mcp_command=mcp_command).install_global_plugin(
+    return ProjectInitializer(mcp_command=mcp_command, reader_dir=reader_dir).install_global_plugin(
         HostKind.ANTIGRAVITY,
         plugin_dir=plugin_dir,
         overwrite=overwrite,
@@ -1204,10 +1261,11 @@ def install_codex_plugin(
     *,
     plugin_dir: Path | str | None = None,
     mcp_command: Sequence[str] | str | None = None,
+    reader_dir: Path | str | None = None,
     overwrite: bool = True,
 ) -> GlobalPluginInstallResult:
     """快捷安装或更新本机全局 Codex / ChatGPT Desktop ``ddnovel`` 配置与技能。"""
-    return ProjectInitializer(mcp_command=mcp_command).install_global_plugin(
+    return ProjectInitializer(mcp_command=mcp_command, reader_dir=reader_dir).install_global_plugin(
         HostKind.CODEX,
         plugin_dir=plugin_dir,
         overwrite=overwrite,
@@ -1246,6 +1304,7 @@ __all__ = [
     "GlobalPluginInstallResult",
     "InitBookResult",
     "ProjectInitializer",
+    "READER_MCP_SERVER_NAME",
     "SKILL_ROLES",
     "init_book",
     "install_antigravity_plugin",

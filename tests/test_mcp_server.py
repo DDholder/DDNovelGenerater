@@ -720,4 +720,20 @@ def test_mcp_upsert_setting_returns_abstraction_warnings(tmp_path: Path) -> None
         assert "abstraction" not in leaky_res["summary"].lower() or "泄露风险" in leaky_res["summary"]
         assert "泄露风险" in leaky_res["summary"]
 
+        ms_dir = book_dir / "04_创作" / "定稿" / "第01卷"
+        ms_dir.mkdir(parents=True, exist_ok=True)
+        (ms_dir / "第0001章-起航.md").write_text("# 第 1 章 起航\n\n正文一。\n", encoding="utf-8")
+        (ms_dir / "第0002章-风暴.md").write_text("# 第 2 章 风暴\n\n正文二。\n", encoding="utf-8")
+        export_res = _extract_payload(
+            await server.call_tool(
+                "novel_export_txt",
+                {},
+                run_middleware=False,
+            )
+        )
+        assert export_res["ok"] is True
+        assert export_res["chapter_count"] == 2
+        assert export_res["chapters"] == [1, 2]
+        assert (book_dir / export_res["output_path"]).is_file()
+
     asyncio.run(_run())

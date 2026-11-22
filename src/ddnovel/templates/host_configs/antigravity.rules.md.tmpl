@@ -30,3 +30,6 @@
 5. **视觉衍生 · 角色立绘与章节场景 CG**：
    - 绘制角色图时激活 `dd-character-illustrator` 技能，读取 `01_设定集/人物/` 角色设定卡（按需核对 `03_状态/当前/人物状态.yaml`），套用既定明亮通透、柔光半厚涂的商业级日系二次元角色立绘画风委派 `image-generator` 绘制并按角色归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/`。
    - 绘制章节场景图时激活 `dd-scene-cg-illustrator` 技能，读取指定章节正文与关联设定，**必须先精选 3～5 个候选场景给作者确认**，确认后再套用轻小说/游戏剧情 CG 画风委派 `image-generator` 绘制并按分卷归档至 `04_创作/插画/场景CG/第XX卷/`。
+6. **阅读器交付 · DDNovelReader 作品包适配 (`dd-reader-packager`)**：
+   - 生成适配 **DDNovelReader**（`.ddbook` / `.ddpatch` Protocol v1.0）的作品包时激活 `dd-reader-packager` 技能，协同 `ddnovel` MCP（`novel_reader_plan_chapter` / `novel_reader_export` / `novel_reader_validate_pack`）与 `ddnovel-reader` MCP（`ddbook_*`）输出至 `04_创作/阅读器作品包/`。
+   - **全书导出**支持一键编译当前全部章节、防剧透时空百科与已有插画并封装严格校验通过的 `.ddbook` / `.ddpatch`；**单章设计**必须先分析并向作者呈报《单章伴读演出与视觉资源需求清单》（角色立绘/差分、微徽章头像、场景背景、典藏剧情 CG 及已有/缺失状态），待作者确认补图或占位图方案后再精修落盘与预演校验。

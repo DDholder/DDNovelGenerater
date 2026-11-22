@@ -96,6 +96,14 @@ LEGACY_DRAFTS_SUBDIR: Final[str] = "drafts"
 ZH_MANUSCRIPT_SUBDIR: Final[str] = "定稿"
 LEGACY_MANUSCRIPT_SUBDIR: Final[str] = "manuscript"
 
+ZH_ILLUSTRATIONS_SUBDIR: Final[str] = "插画"
+LEGACY_ILLUSTRATIONS_SUBDIR: Final[str] = "illustrations"
+ZH_CHARACTER_PORTRAITS_SUBDIR: Final[str] = "角色立绘"
+ZH_SCENE_CGS_SUBDIR: Final[str] = "场景CG"
+
+ZH_READER_PACK_SUBDIR: Final[str] = "阅读器作品包"
+LEGACY_READER_PACK_SUBDIR: Final[str] = "reader_pack"
+
 _CN_OR_ARABIC_NUM: Final[str] = r"[零〇一二三四五六七八九十百千万两\d]+"
 _VOL_ID_RE: Final[re.Pattern[str]] = re.compile(r"^vol_(\d+)$")
 _ARC_ID_RE: Final[re.Pattern[str]] = re.compile(r"^vol_(\d+)_arc_(\d+)$")
@@ -399,6 +407,24 @@ def resolve_manuscript_dir(book_dir: Path | str, *, for_write: bool = False) -> 
         book_dir,
         (ZH_CREATION_DIR, ZH_MANUSCRIPT_SUBDIR),
         (LEGACY_CREATION_DIR, LEGACY_MANUSCRIPT_SUBDIR),
+        for_write=for_write,
+    )
+
+
+def resolve_illustrations_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return _resolve_pair(
+        book_dir,
+        (ZH_CREATION_DIR, ZH_ILLUSTRATIONS_SUBDIR),
+        (LEGACY_CREATION_DIR, LEGACY_ILLUSTRATIONS_SUBDIR),
+        for_write=for_write,
+    )
+
+
+def resolve_reader_pack_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return _resolve_pair(
+        book_dir,
+        (ZH_CREATION_DIR, ZH_READER_PACK_SUBDIR),
+        (LEGACY_CREATION_DIR, LEGACY_READER_PACK_SUBDIR),
         for_write=for_write,
     )
 
@@ -1053,9 +1079,11 @@ __all__ = [
     "LEGACY_DRAFTS_SUBDIR",
     "LEGACY_FACTIONS_STATE_FILENAME",
     "LEGACY_HISTORY_SUBDIR",
+    "LEGACY_ILLUSTRATIONS_SUBDIR",
     "LEGACY_MANUSCRIPT_SUBDIR",
     "LEGACY_MASTER_OUTLINE_FILENAME",
     "LEGACY_PACKETS_SUBDIR",
+    "LEGACY_READER_PACK_SUBDIR",
     "LEGACY_RELATIONS_FILENAME",
     "LEGACY_SETTINGS_DIR",
     "LEGACY_STATE_DIR",
@@ -1071,16 +1099,20 @@ __all__ = [
     "ZH_AUTHOR_NOTES_DIR",
     "ZH_AUTHOR_NOTES_README_FILENAME",
     "ZH_BLUEPRINTS_SUBDIR",
+    "ZH_CHARACTER_PORTRAITS_SUBDIR",
     "ZH_CHARACTERS_STATE_FILENAME",
     "ZH_CONFIG_FILENAME",
     "ZH_CREATION_DIR",
     "ZH_DRAFTS_SUBDIR",
     "ZH_FACTIONS_STATE_FILENAME",
     "ZH_HISTORY_SUBDIR",
+    "ZH_ILLUSTRATIONS_SUBDIR",
     "ZH_MANUSCRIPT_SUBDIR",
     "ZH_MASTER_OUTLINE_FILENAME",
     "ZH_PACKETS_SUBDIR",
+    "ZH_READER_PACK_SUBDIR",
     "ZH_RELATIONS_FILENAME",
+    "ZH_SCENE_CGS_SUBDIR",
     "ZH_SETTINGS_DIR",
     "ZH_STATE_DIR",
     "ZH_STRUCTURE_DIR",
@@ -1133,11 +1165,13 @@ __all__ = [
     "resolve_drafts_dir",
     "resolve_facts_file",
     "resolve_history_dir",
+    "resolve_illustrations_dir",
     "resolve_manuscript_dir",
     "resolve_manuscript_file",
     "resolve_master_outline",
     "resolve_packet_file",
     "resolve_packets_dir",
+    "resolve_reader_pack_dir",
     "resolve_relations_file",
     "resolve_setting_dir",
     "resolve_setting_file",

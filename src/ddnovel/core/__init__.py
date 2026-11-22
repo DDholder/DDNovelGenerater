@@ -18,6 +18,22 @@ from .parser import (
     split_progressive_blocks,
 )
 from .radar import ForeshadowRadar, scan_foreshadow_radar
+from .reader_export import (
+    DDNOVEL_READER_DIR_ENV_VAR,
+    ChapterCastProfile,
+    ChapterResourcePlan,
+    ReaderExporter,
+    ReaderExportResult,
+    ReaderResourceRequirement,
+    ReaderValidationResult,
+    build_reader_patch,
+    discover_reader_dir,
+    pack_reader_book,
+    resolve_reader_mcp_command,
+    resolve_reader_mcp_script,
+    resolve_reader_tool_script,
+    validate_reader_target,
+)
 from .vector_store import (
     DeterministicHashEmbedder,
     EmbeddingDimensionError,
@@ -32,7 +48,10 @@ from .vector_store import (
 )
 
 __all__ = [
+    "DDNOVEL_READER_DIR_ENV_VAR",
     "AliasMatcher",
+    "ChapterCastProfile",
+    "ChapterResourcePlan",
     "DeterministicHashEmbedder",
     "EmbeddingDimensionError",
     "EmbeddingError",
@@ -41,18 +60,28 @@ __all__ = [
     "LifecycleManager",
     "PacketBuilder",
     "ProgressiveParser",
+    "ReaderExportResult",
+    "ReaderExporter",
+    "ReaderResourceRequirement",
+    "ReaderValidationResult",
     "SqliteIndexer",
     "VectorDocument",
     "VectorPlugin",
     "VectorSyncStats",
     "build_fts_query",
     "build_packet",
+    "build_reader_patch",
     "cosine_similarity",
+    "discover_reader_dir",
     "estimate_tokens",
     "lint_model_setting_doc",
     "pack_f32",
+    "pack_reader_book",
     "parse_blueprint_md",
     "parse_setting_md",
+    "resolve_reader_mcp_command",
+    "resolve_reader_mcp_script",
+    "resolve_reader_tool_script",
     "rrf_fuse",
     "scan_foreshadow_radar",
     "scan_setting_impact",
@@ -60,4 +89,5 @@ __all__ = [
     "split_progressive_blocks",
     "tokenize_cjk",
     "unpack_f32",
+    "validate_reader_target",
 ]
