@@ -16,8 +16,10 @@ from typer.testing import CliRunner
 from ddnovel.cli import app
 from ddnovel.core.reader_export import (
     ReaderExporter,
+    _encode_png_rgba,
     _generate_placeholder_png,
     discover_reader_dir,
+    is_placeholder_png,
     validate_reader_target,
 )
 from ddnovel.mcp_server import create_server
@@ -393,3 +395,106 @@ def test_host_initializer_registers_ddnovel_reader_mcp_when_reader_dir_provided(
     dsh_cfg = yaml.safe_load((book_dir / ".dsh" / "cordis.mcp.patch.yml").read_text(encoding="utf-8"))
     inserts = [entry for op in dsh_cfg if isinstance(op, dict) for entry in op.get("insert", [])]
     assert any(e.get("id") == "mcp-ddnovel-reader" for e in inserts)
+
+
+def _make_real_png_bytes(r: int = 80, g: int = 160, b: int = 220) -> bytes:
+    """生成不含占位标记的真实测试 PNG 字节流。"""
+    row = bytes([r, g, b, 255] * 8)
+    return _encode_png_rgba(8, 8, [row] * 8, is_placeholder=False)
+
+
+def test_archive_generated_assets_under_project_and_reverse_sync_skips_placeholders(
+    tmp_path: Path,
+) -> None:
+    """验证过程中生成的图片归档在小说项目 04_创作/插画/ 下，且反向归档自动跳过占位图。"""
+    book_dir = _create_rich_novel_book(tmp_path)
+    exporter = ReaderExporter(book_dir)
+
+    # 1. 先导出一次（生成占位图）
+    exp1 = exporter.export_book(pack_ddbook=False, generate_placeholders=True, strict_validate=True)
+    source_dir = Path(exp1.source_dir)
+    cover_in_source = source_dir / "assets" / "cover.png"
+    assert is_placeholder_png(cover_in_source) is True
+
+    # 2. 模拟外部生图目录（如 $CODEX_HOME/generated_images/）产出真实立绘差分、头像、封面
+    external_gen_dir = tmp_path / "external_generated_images"
+    external_gen_dir.mkdir()
+    gen_alert = external_gen_dir / "gen_lin_alert.png"
+    gen_avatar = external_gen_dir / "gen_lin_avatar.png"
+    gen_cover = external_gen_dir / "gen_cover.png"
+    gen_alert.write_bytes(_make_real_png_bytes(220, 90, 90))
+    gen_avatar.write_bytes(_make_real_png_bytes(90, 220, 180))
+    gen_cover.write_bytes(_make_real_png_bytes(40, 80, 160))
+
+    # 通过 archive_asset 归档至项目 04_创作/插画/ 并同步至 source/assets/
+    arch_alert = exporter.archive_asset(
+        gen_alert,
+        category="sprite",
+        entity_id="char_lin",
+        outfit="常服",
+        expression="alert",
+    )
+    assert arch_alert.archive_rel_path == "04_创作/插画/角色立绘/char_lin-林岚/char_lin-林岚_常服_alert.png"
+    assert (book_dir / arch_alert.archive_rel_path).is_file()
+    assert arch_alert.synced_to_source_path is not None
+    assert not is_placeholder_png(Path(arch_alert.synced_to_source_path))
+
+    arch_avatar = exporter.archive_asset(gen_avatar, category="portrait", entity_id="char_lin")
+    assert arch_avatar.archive_rel_path == "04_创作/插画/角色头像/char_lin-林岚_头像.png"
+    assert (book_dir / arch_avatar.archive_rel_path).is_file()
+
+    arch_cover = exporter.archive_asset(gen_cover, category="cover")
+    assert arch_cover.archive_rel_path == "04_创作/插画/封面与横幅/cover.png"
+    assert (book_dir / arch_cover.archive_rel_path).is_file()
+    assert not is_placeholder_png(cover_in_source)
+
+    # 验证资产清单.yaml 已登记全部归档记录
+    catalog_path = book_dir / "04_创作" / "插画" / "资产清单.yaml"
+    assert catalog_path.is_file()
+    catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+    archived_rels = {item["archive_path"] for item in catalog["assets"]}
+    assert {
+        arch_alert.archive_rel_path,
+        arch_avatar.archive_rel_path,
+        arch_cover.archive_rel_path,
+    } <= archived_rels
+
+    # 3. 再次运行单章规划：已归档的 alert 差分、头像与封面均应识别为 ready，且每项都带 archive_target_path
+    plan = exporter.plan_chapter_resources(1)
+    by_path = {r.asset_path: r for r in plan.resources}
+    assert all(r.archive_target_path and r.archive_target_path.startswith("04_创作/插画/") for r in plan.resources)
+    assert by_path["assets/sprites/char_lin_default_alert.png"].status == "ready"
+    assert by_path["assets/portraits/char_lin_badge.png"].status == "ready"
+    assert by_path["assets/cover.png"].status == "ready"
+
+    # 4. 模拟直接往 source/assets/bg/loc_berth.png 放入真实场景背景图，执行反向归档（跳过其余占位图）
+    direct_bg = source_dir / "assets" / "bg" / "loc_berth.png"
+    direct_bg.write_bytes(_make_real_png_bytes(30, 60, 90))
+    sync_res = exporter.sync_assets_to_archive(source_dir=source_dir)
+    assert any(item["reader_asset_path"] == "assets/bg/loc_berth.png" for item in sync_res.archived)
+    assert (book_dir / "04_创作" / "插画" / "场景背景" / "loc_berth-零点泊位.png").is_file()
+    assert len(sync_res.skipped_placeholders) >= 1
+    assert "assets/banner.png" in sync_res.skipped_placeholders
+
+    # 5. CLI & MCP 归档接口冒烟测试
+    gen_banner = external_gen_dir / "gen_banner.png"
+    gen_banner.write_bytes(_make_real_png_bytes(110, 120, 200))
+    cli_res = runner.invoke(
+        app,
+        ["reader", "archive", str(gen_banner), "-d", str(book_dir), "-C", "banner", "--json"],
+    )
+    assert cli_res.exit_code == 0, cli_res.output
+    cli_data = json.loads(cli_res.output)
+    assert cli_data["archive_rel_path"] == "04_创作/插画/封面与横幅/banner.png"
+
+    async def _run_mcp_archive() -> None:
+        server = create_server(book_dir=book_dir)
+        res = await server.call_tool(
+            "novel_reader_archive_asset",
+            {"sync_from_source": True},
+        )
+        payload = json.loads(res.content[0].text)
+        assert payload["ok"] is True
+        assert payload["action"] == "sync_from_source"
+
+    asyncio.run(_run_mcp_archive())

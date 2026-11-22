@@ -3755,9 +3755,9 @@ def reader_plan_cmd(
         table = Table(show_header=True, header_style="bold cyan")
         table.add_column("类别", no_wrap=True)
         table.add_column("资源名称", style="bold")
-        table.add_column("目标路径", style="dim")
+        table.add_column("项目归档路径", style="cyan")
+        table.add_column("作品包路径", style="dim")
         table.add_column("状态", no_wrap=True)
-        table.add_column("推荐规格")
         table.add_column("建议技能", no_wrap=True)
         status_map = {
             "ready": "[green]已有[/]",
@@ -3768,9 +3768,9 @@ def reader_plan_cmd(
             table.add_row(
                 req.category,
                 req.title,
+                req.archive_target_path or "-",
                 req.asset_path,
                 status_map.get(req.status, req.status),
-                req.recommended_size,
                 req.recommended_skill or "-",
             )
         console.print(table)
@@ -4076,6 +4076,132 @@ def reader_pack_cmd(
             f"[bold green]已成功封装 {kind}:[/] [bold cyan]{packed.as_posix()}[/]\n"
             f"[bold]校验器:[/] {val.tool if val else '-'} (errors={val.errors if val else 0}, warnings={val.warnings if val else 0})",
             title="DDNovelReader 容器打包完成 (reader pack)",
+            border_style="green",
+        )
+    )
+
+
+@reader_app.command(
+    "archive",
+    epilog=(
+        "示例:\n"
+        "  ddnovel reader archive ./gen.png -d . -C sprite -e char_lin --expression alert\n"
+        "  ddnovel reader archive ./bg.png -d . -C background -e loc_berth --label 雨夜栈桥\n"
+        "  ddnovel reader archive -d . --sync-from-source   # 将作品包 source/assets/ 中全部真实图片反向归档至 04_创作/插画/"
+    ),
+)
+@_cli_guard
+def reader_archive_cmd(
+    ctx: typer.Context,
+    source_file: Annotated[
+        Path | None,
+        typer.Argument(help="待归档的源图片/媒体文件路径（使用 --sync-from-source 时可省略）"),
+    ] = None,
+    category: Annotated[
+        str | None,
+        typer.Option(
+            "--category",
+            "-C",
+            help="资产分类 (sprite | portrait | background | cg | cover | banner | video | rig)",
+        ),
+    ] = None,
+    entity_id: Annotated[
+        str | None,
+        typer.Option("--entity-id", "-e", help="关联实体 ID（如 char_lin / loc_berth）"),
+    ] = None,
+    chapter: Annotated[
+        int | None,
+        typer.Option("--chapter", "-c", help="关联章号（CG 或单章背景）"),
+    ] = None,
+    volume_id: Annotated[
+        str | None,
+        typer.Option("--volume-id", "-v", help="所属分卷 ID（如 vol_01）"),
+    ] = None,
+    outfit: Annotated[
+        str,
+        typer.Option("--outfit", help="立绘服装名称（默认 常服）"),
+    ] = "常服",
+    expression: Annotated[
+        str,
+        typer.Option("--expression", help="立绘表情名（如 neutral / alert / smile）"),
+    ] = "neutral",
+    label: Annotated[
+        str,
+        typer.Option("--label", "-l", help="场景短名或素材标签"),
+    ] = "",
+    reader_asset_path: Annotated[
+        str | None,
+        typer.Option("--reader-asset-path", help="显式指定作品包内相对路径（如 assets/sprites/char_lin_default_alert.png）"),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", "-o", help="作品包目录（默认 04_创作/阅读器作品包/）"),
+    ] = None,
+    sync_source: Annotated[
+        bool,
+        typer.Option("--sync-source/--no-sync-source", help="归档后是否同步复制进作品包 source/assets/"),
+    ] = True,
+    sync_from_source: Annotated[
+        bool,
+        typer.Option("--sync-from-source", help="扫描作品包 source/assets/ 并将全部非占位真实资产反向归档至 04_创作/插画/"),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="输出结构化 JSON 结果"),
+    ] = False,
+    book_dir: BookDirOption = None,
+) -> None:
+    """将生图/设计过程中产生的图片与媒体资产规范归档至小说项目 `04_创作/插画/` 并维护 `资产清单.yaml`。"""
+    bdir = _resolve_book_dir(book_dir, ctx)
+    exporter = ReaderExporter(bdir)
+
+    if sync_from_source:
+        sync_res = exporter.sync_assets_to_archive(output_dir=output_dir)
+        if as_json:
+            typer.echo(json.dumps(sync_res.to_dict(), ensure_ascii=False, indent=2))
+            return
+        console.print(
+            Panel(
+                f"[bold]扫描源目录:[/] {sync_res.source_dir}\n"
+                f"[bold green]新增归档:[/] {len(sync_res.archived)} 项 | "
+                f"[bold]已有跳过:[/] {len(sync_res.already_archived)} 项 | "
+                f"[dim]忽略占位图:[/] {len(sync_res.skipped_placeholders)} 项\n"
+                f"[bold]资产台账:[/] [cyan]{sync_res.catalog_path}[/]",
+                title="项目资产反向归档完成 (reader archive --sync-from-source)",
+                border_style="green",
+            )
+        )
+        return
+
+    if source_file is None:
+        raise ValueError("请提供待归档文件路径，或使用 --sync-from-source 扫描作品包反向归档")
+    if not category:
+        raise ValueError("单项归档必须指定 --category / -C (sprite|portrait|background|cg|cover|banner|video|rig)")
+
+    res = exporter.archive_asset(
+        source_file,
+        category=category,
+        entity_id=entity_id,
+        chapter=chapter,
+        volume_id=volume_id,
+        outfit=outfit,
+        expression=expression,
+        label=label,
+        reader_asset_path=reader_asset_path,
+        output_dir=output_dir,
+        sync_to_reader_source=sync_source,
+    )
+    if as_json:
+        typer.echo(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+        return
+    console.print(
+        Panel(
+            f"[bold]资产分类:[/] [cyan]{res.category}[/]\n"
+            f"[bold green]项目归档路径:[/] [bold cyan]{res.archive_rel_path}[/]\n"
+            f"[bold]作品包映射:[/] {res.reader_asset_path or '-'}\n"
+            f"[bold]同步入包:[/] {res.synced_to_source_path or '未同步'}\n"
+            f"[bold]资产台账:[/] {res.catalog_path}",
+            title="项目视觉资产归档完成 (reader archive)",
             border_style="green",
         )
     )

@@ -26,6 +26,7 @@ allowed-tools:
   - novel_reader_plan_chapter
   - novel_reader_export
   - novel_reader_validate_pack
+  - novel_reader_archive_asset
   - novel_list_settings
   - novel_inspect_entity
   - novel_search
@@ -67,11 +68,13 @@ metadata:
     - "ddnovel reader export"
     - "ddnovel reader validate"
     - "ddnovel reader pack"
+    - "ddnovel reader archive"
     - "ddnovel host sync"
   mcp_tools:
     - novel_reader_plan_chapter
     - novel_reader_export
     - novel_reader_validate_pack
+    - novel_reader_archive_asset
     - novel_list_settings
     - novel_inspect_entity
     - novel_search
@@ -113,6 +116,25 @@ metadata:
 6. **画廊防撞键铁律**：`gallery/index.json` 中每个 `expression` 与 `scene variant` 都必须填写**全局唯一**的 `unlock_gallery_id`（如 `gal_char_lin_default_alert`），绝不能只留通用名 `"neutral"` 导致跨角色误解锁。
 7. **时空百科严格防剧透**：严禁将设定卡 `## [机密]` 提前写入未达解锁水位线的 `codex` 快照；`unlock_at.chapter_index` 与章节 `chapter_index` 对齐，`block_index` 为 **0-based 数组下标**（建议始终传 `ddbook_upsert_codex(auto_align_anchors=true)` 自动校准）。
 8. **ZIP Store 无压缩封装**：`.ddbook` 与 `.ddpatch` 必须为无压缩 **ZIP Store (method=0)**、无加密、无 Data Descriptor (`flag 0x0008`)、根目录直接平铺 `manifest.json`（或 `patch.json`），且通过 `ddbook_validate_target(strict=true)`（0 error, 0 warning）。
+
+---
+
+## 1.5 核心铁律：过程产生的所有图片与资产必须归档在当前小说项目底下（Archive-First）
+
+在设计单章演出或制作全书作品包过程中产生的**全部图片与媒体资产**（无论由 `image-generator`、`image_gen`、外部画图或裁切处理生成），**严禁仅遗留在宿主临时目录（如 `$CODEX_HOME/generated_images/`、聊天附件/artifact 目录或系统临时目录），也严禁只孤立写入作品包输出目录 `source/assets/` 而未入项目库**！必须严格遵守“**先归档项目真源、再同步入包**”原则：
+
+| 资产类别 | 项目归档真源目录（`<book_dir>/04_创作/插画/`） | 对应作品包路径 |
+| :--- | :--- | :--- |
+| **角色立绘与表情/服装差分 (`sprite`)** | `04_创作/插画/角色立绘/<实体ID>-<角色名>/<实体ID>-<角色名>_<服装>_<表情>.png` | `assets/sprites/<id>_default_<expr>.png` |
+| **说话人微徽章与百科头像 (`portrait`)** | `04_创作/插画/角色头像/<实体ID>-<角色名>_头像.png` | `assets/portraits/<id>_badge.png` |
+| **场景背景图与天气变体 (`background`)** | `04_创作/插画/场景背景/<地点ID>-<场景名>[_<变体>].png` | `assets/bg/<slug>.png` |
+| **典藏剧情 CG / 破框插图 (`cg`)** | `04_创作/插画/场景CG/第XX卷/第XXXX章_S01_<场景短名>.png` | `assets/cgs/cg_ch_XXXX_01.png` |
+| **作品封面与详情横幅 (`cover` / `banner`)** | `04_创作/插画/封面与横幅/cover.png`、`banner.png` | `assets/cover.png`、`assets/banner.png` |
+| **动态视频与骨骼立绘 (`video` / `rig`)** | `04_创作/插画/动态素材/<文件名>` | `assets/videos/...`、`assets/rigs/...` |
+| **项目资产归档台账** | `04_创作/插画/资产清单.yaml` | 自动映射真源与作品包路径，跨章复用 |
+
+- **标准归档动作**：每生成一张真实图片，立即调用 **`novel_reader_archive_asset(source_file=..., category=..., entity_id=..., chapter=..., ...)`**（或 CLI `ddnovel reader archive <文件> -d <book_dir> -C <类别> ...`），一步完成“归档至项目 `04_创作/插画/` + 登记 `资产清单.yaml` + 同步写入作品包 `source/assets/`”。
+- **打包前兜底巡检**：若过程中有真实图片被直接放入了 `source/assets/`，在最终打包前务必调用 **`novel_reader_archive_asset(sync_from_source=True)`**（或 `ddnovel reader archive -d <book_dir> --sync-from-source`），系统会自动跳过占位 PNG，将全部真实图片反向归档到项目 `04_创作/插画/`。
 
 ---
 
@@ -190,12 +212,12 @@ metadata:
   2. 先挑选关键角色立绘（`dd-character-illustrator`）与核心剧情 CG（`dd-scene-cg-illustrator`）绘制落盘，再编译本章；
   3. 调整资源清单或分镜脚本后再继续。
 
-### 步骤 3 · 补齐资源与精修单章伴读脚本
+### 步骤 3 · 补齐资源（先归档项目再入包）与精修单章伴读脚本
 按作者拍板结果执行：
-1. **补图协同**：
-   - 需要画角色立绘/表情差分时，按 `dd-character-illustrator` 规范绘制并归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/`，再复制/转换至作品包 `source/assets/sprites/`；
-   - 需要画剧情 CG/场景插图时，按 `dd-scene-cg-illustrator` 规范绘制并归档至 `04_创作/插画/场景CG/第XX卷/`，再复制至作品包 `source/assets/cgs/` 或 `source/assets/bg/`；
-   - 未即时绘制的占位资产通过 `ddbook_generate_placeholder_assets(book_dir="<source_dir>")` 一键补全。
+1. **补图协同与项目内强制归档**：
+   - 需要画角色立绘/表情差分或头像时，按 `dd-character-illustrator` 规范绘制，**立即调用 `novel_reader_archive_asset` 归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/` 或 `04_创作/插画/角色头像/`**（同步登记 `资产清单.yaml` 并自动同步进 `source/assets/`）；
+   - 需要画剧情 CG、场景背景、封面或横幅时，按 `dd-scene-cg-illustrator` 规范绘制，**立即调用 `novel_reader_archive_asset` 归档至 `04_创作/插画/场景CG/第XX卷/`、`04_创作/插画/场景背景/` 或 `04_创作/插画/封面与横幅/`**；
+   - 未即时绘制的占位资产通过 `ddbook_generate_placeholder_assets(book_dir="<source_dir>")` 一键补全（占位图绝不混入项目真源插画库）。
 2. **编排写入单章 JSON**：
    - 若作品包尚未初始化：先执行 `novel_reader_export(chapter=<N>, pack_ddbook=False)` 或 `ddbook_init_project` 建立骨架；
    - 精修章节脚本：优先使用 `ddbook_draft_chapter_from_text` 生成初版块结构，随后精雕 `initial_stage`、`stage_patch`（镜头/天气/立绘表情/破框 CG）、`card_meta` 与 `entity_refs`，再调用 **`ddbook_upsert_chapter(book_dir="<source_dir>", chapter=<ChapterDocument>, strict=true)`** 原子写入并同步 `manifest.json`（保留其余章节不动）。
@@ -225,4 +247,5 @@ metadata:
 | **占位图与缺口补齐** | `novel_reader_export(..., generate_placeholders=True)` | `ddbook_generate_placeholder_assets` | 生成轻量合法透明立绘/场景 PNG 占位图，不阻塞预演与校验 |
 | **真机舞台与防剧透预演** | — | `ddbook_preview_stage` / `ddbook_preview_codex` | 实际运行阅读器 `StageSnapshotReducer` 与水位线遮蔽检查 |
 | **严格校验与 `.ddbook`/`.ddpatch` 打包** | `novel_reader_validate_pack` / `ddnovel reader validate` / `ddnovel reader pack` | `ddbook_validate_target` / `ddbook_pack_book` / `ddbook_build_patch` | 确保 `errors=0, warnings=0`，输出无压缩 ZIP Store 归档 |
+| **过程图片与媒体资产项目内归档** | `novel_reader_archive_asset` / `ddnovel reader archive [--sync-from-source]` | — | 将立绘/头像/背景/CG/封面横幅归档至 `04_创作/插画/` 并维护 `资产清单.yaml` |
 | **为宿主同步双 MCP 配置** | `ddnovel host install <host> --reader-dir <path>` / `ddnovel host sync --reader-dir <path>` | — | 一并写入 `ddnovel` 与 `ddnovel-reader` MCP 服务配置 |

@@ -503,6 +503,7 @@ def test_reader_packager_skill_domain_requirements():
         "novel_reader_plan_chapter",
         "novel_reader_export",
         "novel_reader_validate_pack",
+        "novel_reader_archive_asset",
         "ddbook_init_project",
         "ddbook_draft_chapter_from_text",
         "ddbook_upsert_chapter",
@@ -530,6 +531,8 @@ def test_reader_packager_skill_domain_requirements():
         "ddnovel reader export",
         "ddnovel reader validate",
         "ddnovel reader pack",
+        "ddnovel reader archive",
+        "资产清单.yaml",
         "unlock_gallery_id",
         "ZIP Store",
     ):

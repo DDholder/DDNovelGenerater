@@ -126,6 +126,7 @@ MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
     "novel_reader_plan_chapter",
     "novel_reader_export",
     "novel_reader_validate_pack",
+    "novel_reader_archive_asset",
 )
 
 _CATEGORY_DIR_MAP: Final[dict[SettingCategory, str]] = {
@@ -1910,6 +1911,74 @@ def create_server(book_dir: Path | str | None = None) -> FastMCP:
             )
         except (FileNotFoundError, KeyError, ValueError, ValidationError, RuntimeError) as exc:
             return _format_error(exc, tool_name="novel_reader_validate_pack")
+
+    @mcp.tool(name="novel_reader_archive_asset")
+    async def novel_reader_archive_asset(
+        source_file: str | None = None,
+        category: str | None = None,
+        entity_id: str | None = None,
+        chapter: int | None = None,
+        volume_id: str | None = None,
+        outfit: str = "常服",
+        expression: str = "neutral",
+        label: str = "",
+        reader_asset_path: str | None = None,
+        output_dir: str | None = None,
+        sync_to_reader_source: bool = True,
+        sync_from_source: bool = False,
+        book_dir: str | None = None,
+    ) -> str:
+        """将过程中产生的图片/媒体资产归档至小说项目 `04_创作/插画/` 并登记 `资产清单.yaml`（支持单项归档或从作品包 `source/assets/` 反向全量归档）。"""
+        try:
+            root = resolve_book_dir(book_dir, default_book_dir)
+            exporter = ReaderExporter(root)
+            if sync_from_source:
+                sync_res = exporter.sync_assets_to_archive(output_dir=output_dir)
+                dumped = sync_res.to_dict()
+                return _format_response(
+                    {
+                        "ok": True,
+                        "tool": "novel_reader_archive_asset",
+                        "action": "sync_from_source",
+                        **dumped,
+                        "summary": (
+                            f"🗂️ 已反向归档 {len(sync_res.archived)} 项真实资产至项目 `04_创作/插画/`"
+                            f"（跳过占位图 {len(sync_res.skipped_placeholders)} / 已归档 {len(sync_res.already_archived)}）"
+                        ),
+                    }
+                )
+            if not source_file or not source_file.strip():
+                raise ValueError("单项归档必须提供 source_file（或设置 sync_from_source=True 从作品包反向归档）")
+            if not category or not category.strip():
+                raise ValueError("单项归档必须提供 category (sprite|portrait|background|cg|cover|banner|video|rig)")
+            res = exporter.archive_asset(
+                source_file,
+                category=category,
+                entity_id=entity_id,
+                chapter=chapter,
+                volume_id=volume_id,
+                outfit=outfit,
+                expression=expression,
+                label=label,
+                reader_asset_path=reader_asset_path,
+                output_dir=output_dir,
+                sync_to_reader_source=sync_to_reader_source,
+            )
+            dumped = res.to_dict()
+            return _format_response(
+                {
+                    "ok": True,
+                    "tool": "novel_reader_archive_asset",
+                    "action": "archive_single",
+                    **dumped,
+                    "summary": (
+                        f"🗂️ 已将 `{res.category}` 资产归档至项目 `{res.archive_rel_path}`"
+                        + (f" 并同步至 `{res.reader_asset_path}`" if res.synced_to_source_path else "")
+                    ),
+                }
+            )
+        except (FileNotFoundError, KeyError, ValueError, ValidationError, RuntimeError) as exc:
+            return _format_error(exc, tool_name="novel_reader_archive_asset")
 
     return mcp
 

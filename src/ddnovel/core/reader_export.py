@@ -36,18 +36,30 @@ import yaml
 from ddnovel.core.indexer import SqliteIndexer
 from ddnovel.core.parser import ProgressiveParser, split_frontmatter
 from ddnovel.core.paths import (
+    ZH_CHARACTER_AVATARS_SUBDIR,
     ZH_CHARACTER_PORTRAITS_SUBDIR,
+    ZH_COVER_BANNER_SUBDIR,
+    ZH_SCENE_BACKGROUNDS_SUBDIR,
     ZH_SCENE_CGS_SUBDIR,
     find_existing_blueprint_file,
+    format_volume_stem,
     infer_volume_id_from_stem,
     list_facts_files,
+    resolve_asset_catalog_file,
+    resolve_character_avatars_dir,
+    resolve_character_portraits_dir,
+    resolve_cover_banner_dir,
     resolve_drafts_dir,
+    resolve_dynamic_media_dir,
     resolve_illustrations_dir,
     resolve_manuscript_dir,
     resolve_master_outline,
     resolve_reader_pack_dir,
     resolve_relations_file,
+    resolve_scene_backgrounds_dir,
+    resolve_scene_cgs_dir,
     resolve_volumes_dir,
+    sanitize_filename_label,
 )
 from ddnovel.core.schemas import (
     BlueprintDoc,
@@ -67,6 +79,10 @@ SCHEMA_VERSION: Final[str] = "1.0"
 _IMAGE_EXTS: Final[frozenset[str]] = frozenset(
     {".png", ".webp", ".avif", ".jpg", ".jpeg", ".gif", ".svg"}
 )
+_MEDIA_EXTS: Final[frozenset[str]] = _IMAGE_EXTS | frozenset(
+    {".mp4", ".m4v", ".webm", ".json", ".atlas", ".moc3"}
+)
+_PNG_PLACEHOLDER_KEY: Final[bytes] = b"DDNovelPlaceholder"
 _IGNORED_PACK_NAMES: Final[frozenset[str]] = frozenset({".DS_Store", "Thumbs.db", "desktop.ini"})
 
 _SAFE_SLUG_RE: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9_-]+")
@@ -238,7 +254,41 @@ class ReaderResourceRequirement:
     outfit: str | None = None
     unlock_gallery_id: str | None = None
     existing_source_path: str | None = None
+    archive_target_path: str | None = None
     recommended_skill: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ArchivedAssetResult:
+    """单条视觉/媒体资产归档至项目 `04_创作/插画/` 目录的交付摘要。"""
+
+    category: str
+    archive_path: str
+    archive_rel_path: str
+    reader_asset_path: str | None
+    synced_to_source_path: str | None
+    catalog_path: str
+    entity_id: str | None = None
+    chapter: int | None = None
+    outfit: str | None = None
+    expression: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class SyncArchiveResult:
+    """反向巡检 `source/assets/` 并归档至项目 `04_创作/插画/` 的结果摘要。"""
+
+    source_dir: str
+    archived: list[dict[str, Any]]
+    skipped_placeholders: list[str]
+    already_archived: list[str]
+    catalog_path: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -411,20 +461,52 @@ def _parse_hex_rgb(hex_color: str) -> tuple[int, int, int]:
     return (108, 229, 232)
 
 
-def _encode_png_rgba(width: int, height: int, rgba_rows: Sequence[bytes]) -> bytes:
-    """零依赖编码合法 8-bit RGBA PNG 文件字节流。"""
+def _encode_png_rgba(
+    width: int,
+    height: int,
+    rgba_rows: Sequence[bytes],
+    *,
+    is_placeholder: bool = False,
+) -> bytes:
+    """零依赖编码合法 8-bit RGBA PNG 文件字节流（可选写入占位图标识 `tEXt` 块）。"""
     def _chunk(chunk_type: bytes, payload: bytes) -> bytes:
         crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
         return struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", crc)
 
     raw_scanlines = b"".join(b"\x00" + row for row in rgba_rows)
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    meta_chunk = _chunk(b"tEXt", _PNG_PLACEHOLDER_KEY + b"\x00true") if is_placeholder else b""
     return (
         b"\x89PNG\r\n\x1a\n"
         + _chunk(b"IHDR", ihdr)
+        + meta_chunk
         + _chunk(b"IDAT", zlib.compress(raw_scanlines, level=6))
         + _chunk(b"IEND", b"")
     )
+
+
+def is_placeholder_png(path: Path | str) -> bool:
+    """判断指定文件是否为 DDNovelGenerater / DDNovelReader 自动生成的占位 PNG。"""
+    file_path = Path(path)
+    if not file_path.is_file() or file_path.suffix.lower() != ".png":
+        return False
+    try:
+        data = file_path.read_bytes()
+    except OSError:
+        return False
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
+        return False
+    pos = 8
+    while pos + 12 <= len(data):
+        length = struct.unpack_from(">I", data, pos)[0]
+        ctype = data[pos + 4 : pos + 8]
+        payload = data[pos + 8 : pos + 8 + length]
+        if ctype == b"tEXt" and payload.startswith(_PNG_PLACEHOLDER_KEY + b"\x00"):
+            return True
+        if ctype == b"IEND":
+            break
+        pos += 12 + length
+    return False
 
 
 def _generate_placeholder_png(asset_path: str, accent_color: str = "#6CE5E8") -> bytes:
@@ -466,7 +548,7 @@ def _generate_placeholder_png(asset_path: str, accent_color: str = "#6CE5E8") ->
                     row[idx + 2] = min(255, int(ab * shade + 40))
                     row[idx + 3] = 240
             rows.append(bytes(row))
-        return _encode_png_rgba(w, h, rows)
+        return _encode_png_rgba(w, h, rows, is_placeholder=True)
 
     if low.startswith("assets/portraits/"):
         w, h = 96, 96
@@ -488,7 +570,7 @@ def _generate_placeholder_png(asset_path: str, accent_color: str = "#6CE5E8") ->
                 elif d2 <= r_outer2:
                     row[idx], row[idx + 1], row[idx + 2], row[idx + 3] = ar, ag, ab, 255
             rows.append(bytes(row))
-        return _encode_png_rgba(w, h, rows)
+        return _encode_png_rgba(w, h, rows, is_placeholder=True)
 
     if "cover" in Path(low).stem:
         w, h = 180, 240
@@ -517,7 +599,7 @@ def _generate_placeholder_png(asset_path: str, accent_color: str = "#6CE5E8") ->
                 row[idx + 2] = min(255, int(base_b + ab * glow + 24 * (1.0 - t)))
                 row[idx + 3] = 255
         rows.append(bytes(row))
-    return _encode_png_rgba(w, h, rows)
+    return _encode_png_rgba(w, h, rows, is_placeholder=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1114,32 +1196,438 @@ class ReaderExporter:
             selected.append(item)
         return selected
 
+    def _load_asset_catalog(self) -> list[dict[str, Any]]:
+        catalog_path = resolve_asset_catalog_file(self._book_dir)
+        if not catalog_path.is_file():
+            return []
+        try:
+            loaded = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if isinstance(loaded, dict) and isinstance(loaded.get("assets"), list):
+            return [dict(item) for item in loaded["assets"] if isinstance(item, dict)]
+        return []
+
+    def _save_asset_catalog(self, entries: Sequence[Mapping[str, Any]]) -> Path:
+        catalog_path = resolve_asset_catalog_file(self._book_dir, for_write=True)
+        catalog_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "updated_at": _utc_now_iso(),
+            "assets": [dict(e) for e in entries],
+        }
+        catalog_path.write_text(
+            yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        return catalog_path
+
+    def compute_archive_path(
+        self,
+        category: str,
+        *,
+        entity_id: str | None = None,
+        chapter: int | None = None,
+        volume_id: str | None = None,
+        outfit: str = "常服",
+        expression: str = "neutral",
+        label: str = "",
+        ext: str = ".png",
+        settings: Mapping[str, SettingDoc] | None = None,
+    ) -> Path:
+        """计算某类视觉/媒体资产在当前小说项目 `04_创作/插画/` 下的标准归档绝对路径。"""
+        cat = category.strip().lower()
+        suffix = ext if ext.startswith(".") else f".{ext}"
+        loaded_settings = settings if settings is not None else self._load_settings()
+
+        if cat == "sprite":
+            if not entity_id:
+                raise ValueError("归档角色立绘 (sprite) 必须提供 entity_id")
+            doc = loaded_settings.get(entity_id)
+            name_lbl = sanitize_filename_label(doc.name if doc else label)
+            folder_name = f"{entity_id}-{name_lbl}" if name_lbl else entity_id
+            outfit_lbl = sanitize_filename_label(outfit) or "常服"
+            expr_lbl = sanitize_filename_label(expression) or "neutral"
+            stem = f"{folder_name}_{outfit_lbl}_{expr_lbl}"
+            return resolve_character_portraits_dir(self._book_dir, for_write=True) / folder_name / f"{stem}{suffix}"
+
+        if cat == "portrait":
+            if not entity_id:
+                raise ValueError("归档角色微徽章/头像 (portrait) 必须提供 entity_id")
+            doc = loaded_settings.get(entity_id)
+            name_lbl = sanitize_filename_label(doc.name if doc else label)
+            base = f"{entity_id}-{name_lbl}" if name_lbl else entity_id
+            return resolve_character_avatars_dir(self._book_dir, for_write=True) / f"{base}_头像{suffix}"
+
+        if cat == "background":
+            doc = loaded_settings.get(entity_id) if entity_id else None
+            parts: list[str] = []
+            if entity_id:
+                parts.append(entity_id)
+            if doc is not None:
+                parts.append(sanitize_filename_label(doc.name))
+            clean_label = sanitize_filename_label(label)
+            if clean_label and clean_label not in parts:
+                parts.append(clean_label)
+            if not parts:
+                parts.append(f"ch_{chapter:04d}_bg" if chapter is not None else "scene_bg")
+            stem = "-".join(p for p in parts if p)
+            return resolve_scene_backgrounds_dir(self._book_dir, for_write=True) / f"{stem}{suffix}"
+
+        if cat == "cg":
+            vol_stem = format_volume_stem(volume_id or "vol_01")
+            clean_label = sanitize_filename_label(label) or "剧情CG"
+            ch_prefix = f"第{chapter:04d}章_" if chapter is not None else ""
+            stem = f"{ch_prefix}{clean_label}"
+            return resolve_scene_cgs_dir(self._book_dir, for_write=True) / vol_stem / f"{stem}{suffix}"
+
+        if cat == "cover":
+            return resolve_cover_banner_dir(self._book_dir, for_write=True) / f"cover{suffix}"
+
+        if cat == "banner":
+            return resolve_cover_banner_dir(self._book_dir, for_write=True) / f"banner{suffix}"
+
+        if cat in {"video", "rig"}:
+            clean_label = sanitize_filename_label(label or entity_id or "media") or "media"
+            return resolve_dynamic_media_dir(self._book_dir, for_write=True) / f"{clean_label}{suffix}"
+
+        raise ValueError(
+            f"不支持的资产类别 {category!r}，可选: sprite | portrait | background | cg | cover | banner | video | rig"
+        )
+
+    def _infer_reader_asset_path(
+        self,
+        category: str,
+        *,
+        entity_id: str | None = None,
+        chapter: int | None = None,
+        expression: str = "neutral",
+        label: str = "",
+        ext: str = ".png",
+    ) -> str | None:
+        cat = category.strip().lower()
+        suffix = ext if ext.startswith(".") else f".{ext}"
+        if cat == "cover":
+            return f"assets/cover{suffix}"
+        if cat == "banner":
+            return f"assets/banner{suffix}"
+        if cat == "sprite" and entity_id:
+            expr_slug = _safe_ascii_id(expression or "neutral", prefix="expr")
+            return f"assets/sprites/{entity_id}_default_{expr_slug}{suffix}"
+        if cat == "portrait" and entity_id:
+            return f"assets/portraits/{entity_id}_badge{suffix}"
+        if cat == "background":
+            slug = _safe_ascii_id(entity_id or label or (f"ch_{chapter:04d}_main" if chapter else "scene"), prefix="bg")
+            return f"assets/bg/{slug}{suffix}"
+        if cat == "cg" and chapter is not None:
+            return f"assets/cgs/cg_ch_{chapter:04d}_01{suffix}"
+        if cat == "video":
+            slug = _safe_ascii_id(label or entity_id or "loop", prefix="vid")
+            return f"assets/videos/{slug}{suffix}"
+        if cat == "rig":
+            slug = _safe_ascii_id(entity_id or label or "rig", prefix="rig")
+            return f"assets/rigs/{slug}{suffix}"
+        return None
+
+    def archive_asset(
+        self,
+        source_file: Path | str,
+        *,
+        category: str,
+        entity_id: str | None = None,
+        chapter: int | None = None,
+        volume_id: str | None = None,
+        outfit: str = "常服",
+        expression: str = "neutral",
+        label: str = "",
+        reader_asset_path: str | None = None,
+        output_dir: Path | str | None = None,
+        sync_to_reader_source: bool = True,
+    ) -> ArchivedAssetResult:
+        """将任意生成/外部图片或媒体文件归档至当前项目 `04_创作/插画/`，写入 `资产清单.yaml` 并可选同步至作品包 `source/`。"""
+        src = Path(source_file).expanduser().resolve()
+        if not src.is_file():
+            raise FileNotFoundError(f"待归档的资产文件不存在: {src}")
+        if src.stat().st_size == 0:
+            raise ValueError(f"待归档的资产文件为空（0 字节）: {src}")
+
+        settings = self._load_settings()
+        ext = src.suffix.lower() or ".png"
+        dest_archive = self.compute_archive_path(
+            category,
+            entity_id=entity_id,
+            chapter=chapter,
+            volume_id=volume_id,
+            outfit=outfit,
+            expression=expression,
+            label=label or src.stem,
+            ext=ext,
+            settings=settings,
+        )
+        dest_archive.parent.mkdir(parents=True, exist_ok=True)
+        if src != dest_archive.resolve():
+            shutil.copy2(src, dest_archive)
+
+        archive_rel = dest_archive.relative_to(self._book_dir).as_posix()
+        resolved_reader_rel = reader_asset_path.strip() if reader_asset_path and reader_asset_path.strip() else (
+            self._infer_reader_asset_path(
+                category,
+                entity_id=entity_id,
+                chapter=chapter,
+                expression=expression,
+                label=label or src.stem,
+                ext=ext,
+            )
+        )
+        if resolved_reader_rel is not None:
+            _validate_rel_posix_path(resolved_reader_rel)
+
+        # 维护项目内 04_创作/插画/资产清单.yaml 台账
+        entries = self._load_asset_catalog()
+        new_entry: dict[str, Any] = {
+            "archive_path": archive_rel,
+            "category": category.strip().lower(),
+            "updated_at": _utc_now_iso(),
+        }
+        if resolved_reader_rel is not None:
+            new_entry["reader_asset_path"] = resolved_reader_rel
+        if entity_id:
+            new_entry["entity_id"] = entity_id
+        if chapter is not None:
+            new_entry["chapter"] = int(chapter)
+        if volume_id:
+            new_entry["volume_id"] = volume_id
+        if category.strip().lower() == "sprite":
+            new_entry["outfit"] = outfit
+            new_entry["expression"] = expression
+        if label.strip():
+            new_entry["label"] = label.strip()
+
+        updated_entries: list[dict[str, Any]] = []
+        replaced = False
+        for item in entries:
+            if item.get("archive_path") == archive_rel or (
+                resolved_reader_rel and item.get("reader_asset_path") == resolved_reader_rel
+            ):
+                if not replaced:
+                    updated_entries.append(new_entry)
+                    replaced = True
+            else:
+                updated_entries.append(item)
+        if not replaced:
+            updated_entries.append(new_entry)
+        catalog_path = self._save_asset_catalog(updated_entries)
+
+        synced_to: str | None = None
+        if sync_to_reader_source and resolved_reader_rel is not None:
+            out_root = (
+                Path(output_dir).resolve()
+                if output_dir is not None
+                else resolve_reader_pack_dir(self._book_dir, for_write=True)
+            )
+            source_dir = out_root / "source"
+            if source_dir.is_dir() or output_dir is not None:
+                target_in_source = source_dir / resolved_reader_rel
+                target_in_source.parent.mkdir(parents=True, exist_ok=True)
+                if dest_archive.resolve() != target_in_source.resolve():
+                    shutil.copy2(dest_archive, target_in_source)
+                synced_to = target_in_source.as_posix()
+
+        return ArchivedAssetResult(
+            category=category.strip().lower(),
+            archive_path=dest_archive.as_posix(),
+            archive_rel_path=archive_rel,
+            reader_asset_path=resolved_reader_rel,
+            synced_to_source_path=synced_to,
+            catalog_path=catalog_path.as_posix(),
+            entity_id=entity_id,
+            chapter=chapter,
+            outfit=outfit if category.strip().lower() == "sprite" else None,
+            expression=expression if category.strip().lower() == "sprite" else None,
+        )
+
+    def sync_assets_to_archive(
+        self,
+        *,
+        output_dir: Path | str | None = None,
+        source_dir: Path | str | None = None,
+    ) -> SyncArchiveResult:
+        """扫描作品包 `source/assets/` 下全部真实素材（跳过自动占位图），将其反向归档至项目 `04_创作/插画/`。"""
+        if source_dir is not None:
+            resolved_src = Path(source_dir).resolve()
+        else:
+            out_root = (
+                Path(output_dir).resolve()
+                if output_dir is not None
+                else resolve_reader_pack_dir(self._book_dir)
+            )
+            resolved_src = out_root / "source"
+
+        assets_dir = resolved_src / "assets"
+        catalog_path = resolve_asset_catalog_file(self._book_dir, for_write=True)
+        if not assets_dir.is_dir():
+            return SyncArchiveResult(
+                source_dir=resolved_src.as_posix(),
+                archived=[],
+                skipped_placeholders=[],
+                already_archived=[],
+                catalog_path=catalog_path.as_posix(),
+            )
+
+        settings = self._load_settings()
+        existing_catalog = {
+            str(e["reader_asset_path"]): str(e["archive_path"])
+            for e in self._load_asset_catalog()
+            if e.get("reader_asset_path") and e.get("archive_path")
+        }
+
+        archived: list[dict[str, Any]] = []
+        skipped_placeholders: list[str] = []
+        already_archived: list[str] = []
+
+        for full in sorted(assets_dir.rglob("*")):
+            if not full.is_file() or full.suffix.lower() not in _MEDIA_EXTS:
+                continue
+            rel_posix = full.relative_to(resolved_src).as_posix()
+            if is_placeholder_png(full):
+                skipped_placeholders.append(rel_posix)
+                continue
+
+            # 若台账已记录且磁盘内容完全一致，跳过重复拷贝
+            if rel_posix in existing_catalog:
+                arch_file = self._book_dir / existing_catalog[rel_posix]
+                if arch_file.is_file() and arch_file.read_bytes() == full.read_bytes():
+                    already_archived.append(rel_posix)
+                    continue
+
+            low = rel_posix.lower()
+            stem = full.stem
+            category = "background"
+            entity_id: str | None = None
+            chapter_num: int | None = None
+            expression = "neutral"
+            label = stem
+
+            if low.startswith("assets/cover"):
+                category = "cover"
+            elif low.startswith("assets/banner"):
+                category = "banner"
+            elif low.startswith("assets/sprites/"):
+                category = "sprite"
+                for eid in settings:
+                    if stem.startswith(f"{eid}_") or stem == eid:
+                        entity_id = eid
+                        rest = stem[len(eid) :].lstrip("_")
+                        parts = [p for p in rest.split("_") if p]
+                        if parts:
+                            expression = parts[-1]
+                        break
+                if entity_id is None:
+                    entity_id = stem.split("_")[0]
+            elif low.startswith("assets/portraits/"):
+                category = "portrait"
+                for eid in settings:
+                    if stem.startswith(f"{eid}_") or stem == eid:
+                        entity_id = eid
+                        break
+                if entity_id is None:
+                    entity_id = re.sub(r"_badge$", "", stem)
+            elif low.startswith("assets/cgs/"):
+                category = "cg"
+                m = _CHAPTER_NUM_RE.search(stem)
+                if m:
+                    chapter_num = int(m.group(1) or m.group(2))
+            elif low.startswith("assets/bg/"):
+                category = "background"
+                for eid in settings:
+                    if stem == _safe_ascii_id(eid, prefix="bg") or stem.startswith(eid):
+                        entity_id = eid
+                        break
+            elif low.startswith("assets/videos/"):
+                category = "video"
+            elif low.startswith("assets/rigs/"):
+                category = "rig"
+
+            res = self.archive_asset(
+                full,
+                category=category,
+                entity_id=entity_id,
+                chapter=chapter_num,
+                expression=expression,
+                label=label,
+                reader_asset_path=rel_posix,
+                output_dir=resolved_src.parent,
+                sync_to_reader_source=False,
+            )
+            archived.append(res.to_dict())
+
+        return SyncArchiveResult(
+            source_dir=resolved_src.as_posix(),
+            archived=archived,
+            skipped_placeholders=skipped_placeholders,
+            already_archived=already_archived,
+            catalog_path=catalog_path.as_posix(),
+        )
+
     def _scan_existing_illustrations(
         self,
         settings: Mapping[str, SettingDoc],
     ) -> dict[str, Any]:
-        """扫描 `04_创作/插画/` 已有角色立绘、章节场景 CG、背景与封面素材。"""
+        """扫描项目 `04_创作/插画/` 下的全部已归档资产（立绘/头像/背景/CG/封面横幅与资产台账）。"""
         illus_root = resolve_illustrations_dir(self._book_dir)
         char_sprites: dict[str, dict[str, Path]] = {}
         char_all_files: dict[str, list[Path]] = {}
+        char_avatars: dict[str, Path] = {}
         chapter_cgs: dict[int, list[Path]] = {}
         backgrounds: dict[str, Path] = {}
+        catalog_map: dict[str, Path] = {}
         cover_file: Path | None = None
         banner_file: Path | None = None
+
+        # 0. 读取资产归档台账（最高优先级精确映射 reader_asset_path -> 项目归档文件）
+        for entry in self._load_asset_catalog():
+            arch_rel = entry.get("archive_path")
+            reader_rel = entry.get("reader_asset_path")
+            if isinstance(arch_rel, str):
+                arch_full = self._book_dir / arch_rel
+                if arch_full.is_file() and arch_full.stat().st_size > 0:
+                    if isinstance(reader_rel, str):
+                        catalog_map[reader_rel] = arch_full
+                    cat = str(entry.get("category", "")).lower()
+                    eid = entry.get("entity_id")
+                    if cat == "cover" and cover_file is None:
+                        cover_file = arch_full
+                    elif cat == "banner" and banner_file is None:
+                        banner_file = arch_full
+                    elif cat == "portrait" and isinstance(eid, str):
+                        char_avatars.setdefault(eid, arch_full)
+                    elif cat == "sprite" and isinstance(eid, str):
+                        expr = str(entry.get("expression") or "neutral")
+                        char_sprites.setdefault(eid, {}).setdefault(expr, arch_full)
+                        if arch_full not in char_all_files.get(eid, []):
+                            char_all_files.setdefault(eid, []).append(arch_full)
+                    elif cat == "background":
+                        if isinstance(eid, str):
+                            backgrounds.setdefault(_safe_ascii_id(eid, prefix="bg"), arch_full)
+                        if isinstance(reader_rel, str):
+                            backgrounds.setdefault(Path(reader_rel).stem.lower(), arch_full)
 
         if not illus_root.is_dir():
             return {
                 "char_sprites": char_sprites,
                 "char_all_files": char_all_files,
+                "char_avatars": char_avatars,
                 "chapter_cgs": chapter_cgs,
                 "backgrounds": backgrounds,
+                "catalog_map": catalog_map,
                 "cover": cover_file,
                 "banner": banner_file,
             }
 
         char_docs = [doc for doc in settings.values() if doc.category == SettingCategory.CHARACTER]
+        loc_docs = [doc for doc in settings.values() if doc.category == SettingCategory.GEOGRAPHY]
 
-        # 1. 角色立绘扫描
+        # 1. 角色立绘扫描（同时识别放在角色目录下的 *_头像.* / *_badge.*）
         portrait_dirs = [
             illus_root / ZH_CHARACTER_PORTRAITS_SUBDIR,
             illus_root / "sprites",
@@ -1159,7 +1647,11 @@ class ReaderExporter:
                         break
                 if matched_id is None:
                     continue
-                char_all_files.setdefault(matched_id, []).append(img)
+                if "头像" in img.stem or "badge" in img.stem.lower() or "avatar" in img.stem.lower():
+                    char_avatars.setdefault(matched_id, img)
+                    continue
+                if img not in char_all_files.get(matched_id, []):
+                    char_all_files.setdefault(matched_id, []).append(img)
                 expr = "neutral"
                 for expr_key, pat in _FILENAME_EXPR_HINTS:
                     if pat.search(img.stem):
@@ -1168,7 +1660,25 @@ class ReaderExporter:
                 char_sprites.setdefault(matched_id, {})
                 char_sprites[matched_id].setdefault(expr, img)
 
-        # 2. 场景 CG 扫描
+        # 2. 角色头像/微徽章扫描（04_创作/插画/角色头像/）
+        avatar_dirs = [
+            illus_root / ZH_CHARACTER_AVATARS_SUBDIR,
+            illus_root / "头像",
+            illus_root / "portraits",
+        ]
+        for adir in avatar_dirs:
+            if not adir.is_dir():
+                continue
+            for img in sorted(adir.rglob("*")):
+                if not img.is_file() or img.suffix.lower() not in _IMAGE_EXTS:
+                    continue
+                rel_str = img.relative_to(adir).as_posix()
+                for cdoc in char_docs:
+                    if cdoc.id in rel_str or cdoc.name in rel_str:
+                        char_avatars.setdefault(cdoc.id, img)
+                        break
+
+        # 3. 场景 CG 扫描
         cg_dirs = [illus_root / ZH_SCENE_CGS_SUBDIR, illus_root / "cgs"]
         for cdir in cg_dirs:
             if not cdir.is_dir():
@@ -1179,29 +1689,43 @@ class ReaderExporter:
                 m = _CHAPTER_NUM_RE.search(img.stem)
                 if m:
                     ch_num = int(m.group(1) or m.group(2))
-                    chapter_cgs.setdefault(ch_num, []).append(img)
+                    if img not in chapter_cgs.get(ch_num, []):
+                        chapter_cgs.setdefault(ch_num, []).append(img)
 
-        # 3. 场景背景 / 封面 / 横幅扫描
-        for bg_dir in (illus_root / "背景", illus_root / "bg"):
-            if bg_dir.is_dir():
-                for img in sorted(bg_dir.rglob("*")):
-                    if img.is_file() and img.suffix.lower() in _IMAGE_EXTS:
-                        backgrounds[img.stem.lower()] = img
-
-        for img in sorted(illus_root.glob("*")):
-            if not img.is_file() or img.suffix.lower() not in _IMAGE_EXTS:
+        # 4. 场景背景扫描（支持 场景背景/、背景/、bg/，并按地点 ID / 中文名 / slug 匹配）
+        for bg_dir in (illus_root / ZH_SCENE_BACKGROUNDS_SUBDIR, illus_root / "背景", illus_root / "bg"):
+            if not bg_dir.is_dir():
                 continue
-            low = img.stem.lower()
-            if cover_file is None and ("cover" in low or "封面" in img.stem):
-                cover_file = img
-            elif banner_file is None and ("banner" in low or "横幅" in img.stem):
-                banner_file = img
+            for img in sorted(bg_dir.rglob("*")):
+                if not img.is_file() or img.suffix.lower() not in _IMAGE_EXTS:
+                    continue
+                backgrounds.setdefault(img.stem.lower(), img)
+                rel_str = img.relative_to(bg_dir).as_posix()
+                for ldoc in loc_docs:
+                    if ldoc.id in rel_str or any(len(t) >= 2 and t in rel_str for t in ldoc.all_names()):
+                        backgrounds.setdefault(_safe_ascii_id(ldoc.id, prefix="bg"), img)
+
+        # 5. 封面与横幅扫描（优先 封面与横幅/，兼容 04_创作/插画/ 根目录）
+        cover_scan_roots = [illus_root / ZH_COVER_BANNER_SUBDIR, illus_root]
+        for croot in cover_scan_roots:
+            if not croot.is_dir():
+                continue
+            for img in sorted(croot.glob("*")):
+                if not img.is_file() or img.suffix.lower() not in _IMAGE_EXTS:
+                    continue
+                low = img.stem.lower()
+                if cover_file is None and ("cover" in low or "封面" in img.stem):
+                    cover_file = img
+                elif banner_file is None and ("banner" in low or "横幅" in img.stem):
+                    banner_file = img
 
         return {
             "char_sprites": char_sprites,
             "char_all_files": char_all_files,
+            "char_avatars": char_avatars,
             "chapter_cgs": chapter_cgs,
             "backgrounds": backgrounds,
+            "catalog_map": catalog_map,
             "cover": cover_file,
             "banner": banner_file,
         }
@@ -1894,7 +2418,12 @@ class ReaderExporter:
         resources: list[ReaderResourceRequirement] = []
 
         # 1. 封面与横幅检查（整书基础门面）
-        cover_ready = (source_dir / "assets/cover.png").is_file() or illus["cover"] is not None
+        def _real_in_source(rel: str) -> bool:
+            cand = source_dir / rel
+            return cand.is_file() and cand.stat().st_size > 0 and not is_placeholder_png(cand)
+
+        cover_archive_rel = self.compute_archive_path("cover", settings=settings).relative_to(self._book_dir).as_posix()
+        cover_ready = _real_in_source("assets/cover.png") or illus["cover"] is not None
         resources.append(
             ReaderResourceRequirement(
                 asset_path="assets/cover.png",
@@ -1906,12 +2435,14 @@ class ReaderExporter:
                 existing_source_path=(
                     illus["cover"].relative_to(self._book_dir).as_posix()
                     if illus["cover"] is not None
-                    else ("source/assets/cover.png" if (source_dir / "assets/cover.png").is_file() else None)
+                    else ("source/assets/cover.png" if _real_in_source("assets/cover.png") else None)
                 ),
+                archive_target_path=cover_archive_rel,
                 recommended_skill="dd-scene-cg-illustrator",
             )
         )
-        banner_ready = (source_dir / "assets/banner.png").is_file() or illus["banner"] is not None
+        banner_archive_rel = self.compute_archive_path("banner", settings=settings).relative_to(self._book_dir).as_posix()
+        banner_ready = _real_in_source("assets/banner.png") or illus["banner"] is not None
         resources.append(
             ReaderResourceRequirement(
                 asset_path="assets/banner.png",
@@ -1923,17 +2454,29 @@ class ReaderExporter:
                 existing_source_path=(
                     illus["banner"].relative_to(self._book_dir).as_posix()
                     if illus["banner"] is not None
-                    else ("source/assets/banner.png" if (source_dir / "assets/banner.png").is_file() else None)
+                    else ("source/assets/banner.png" if _real_in_source("assets/banner.png") else None)
                 ),
+                archive_target_path=banner_archive_rel,
                 recommended_skill="dd-scene-cg-illustrator",
             )
         )
 
         # 2. 场景背景图需求
+        loc_by_slug = {
+            _safe_ascii_id(loc.id, prefix="bg"): loc for loc in meta.get("locations", [])
+        }
         for bg_asset, bg_info in meta["used_backgrounds"].items():
             bg_slug = Path(bg_asset).stem.lower()
-            matched_bg = illus["backgrounds"].get(bg_slug)
-            bg_ready = (source_dir / bg_asset).is_file() or matched_bg is not None
+            loc_doc = loc_by_slug.get(bg_slug)
+            matched_bg = illus.get("catalog_map", {}).get(bg_asset) or illus["backgrounds"].get(bg_slug)
+            bg_ready = _real_in_source(bg_asset) or matched_bg is not None
+            bg_archive_rel = self.compute_archive_path(
+                "background",
+                entity_id=loc_doc.id if loc_doc is not None else None,
+                chapter=chapter,
+                label=bg_info["title"],
+                settings=settings,
+            ).relative_to(self._book_dir).as_posix()
             resources.append(
                 ReaderResourceRequirement(
                     asset_path=bg_asset,
@@ -1942,12 +2485,14 @@ class ReaderExporter:
                     status="ready" if bg_ready else "missing",
                     recommended_size="1920x1080 (16:9) 或 1080x1920 (9:16)，配合 focal_point=[0.5, 0.35]",
                     reason=f"第 {chapter} 章舞台背景（氛围：{meta['weather']['label']}）",
+                    entity_id=loc_doc.id if loc_doc is not None else None,
                     unlock_gallery_id=bg_info["id"],
                     existing_source_path=(
                         matched_bg.relative_to(self._book_dir).as_posix()
                         if matched_bg is not None
-                        else (f"source/{bg_asset}" if (source_dir / bg_asset).is_file() else None)
+                        else (f"source/{bg_asset}" if _real_in_source(bg_asset) else None)
                     ),
+                    archive_target_path=bg_archive_rel,
                     recommended_skill="dd-scene-cg-illustrator",
                 )
             )
@@ -1964,8 +2509,15 @@ class ReaderExporter:
             for expr in cp.detected_expressions or ["neutral"]:
                 sp_asset = f"assets/sprites/{cp.entity_id}_default_{expr}.png"
                 ugid = f"gal_{cp.entity_id}_default_{expr}"
-                exact_file = char_map.get(expr)
-                if (source_dir / sp_asset).is_file():
+                exact_file = illus.get("catalog_map", {}).get(sp_asset) or char_map.get(expr)
+                sp_archive_rel = self.compute_archive_path(
+                    "sprite",
+                    entity_id=cp.entity_id,
+                    outfit="常服",
+                    expression=expr,
+                    settings=settings,
+                ).relative_to(self._book_dir).as_posix()
+                if _real_in_source(sp_asset):
                     status: Literal["ready", "reuse_base", "missing"] = "ready"
                     ex_path: str | None = f"source/{sp_asset}"
                 elif exact_file is not None:
@@ -1992,12 +2544,19 @@ class ReaderExporter:
                         outfit="default",
                         unlock_gallery_id=ugid,
                         existing_source_path=ex_path,
+                        archive_target_path=sp_archive_rel,
                         recommended_skill="dd-character-illustrator",
                     )
                 )
 
             portrait_asset = f"assets/portraits/{cp.entity_id}_badge.png"
-            portrait_ready = (source_dir / portrait_asset).is_file()
+            matched_avatar = illus.get("catalog_map", {}).get(portrait_asset) or illus.get("char_avatars", {}).get(cp.entity_id)
+            portrait_ready = _real_in_source(portrait_asset) or matched_avatar is not None
+            portrait_archive_rel = self.compute_archive_path(
+                "portrait",
+                entity_id=cp.entity_id,
+                settings=settings,
+            ).relative_to(self._book_dir).as_posix()
             resources.append(
                 ReaderResourceRequirement(
                     asset_path=portrait_asset,
@@ -2008,8 +2567,11 @@ class ReaderExporter:
                     reason="对白说话人圆形微徽章（speaker.badge_asset）与时空百科档案头像（portrait_asset）",
                     entity_id=cp.entity_id,
                     existing_source_path=(
-                        f"source/{portrait_asset}" if portrait_ready else base_path_str
+                        matched_avatar.relative_to(self._book_dir).as_posix()
+                        if matched_avatar is not None
+                        else (f"source/{portrait_asset}" if _real_in_source(portrait_asset) else base_path_str)
                     ),
+                    archive_target_path=portrait_archive_rel,
                     recommended_skill="dd-character-illustrator",
                 )
             )
@@ -2019,6 +2581,7 @@ class ReaderExporter:
         if meta["cg_assets_used"]:
             for cg_item in meta["cg_assets_used"]:
                 src_p = cg_item["source_file"]
+                src_rel = src_p.relative_to(self._book_dir).as_posix()
                 resources.append(
                     ReaderResourceRequirement(
                         asset_path=cg_item["asset"],
@@ -2028,7 +2591,8 @@ class ReaderExporter:
                         recommended_size="1920x1080 (16:9 横幅宽屏，破框全屏演出)",
                         reason="已在 04_创作/插画/场景CG/ 检出本章对应剧情 CG，可直接用于破框高潮页",
                         unlock_gallery_id=cg_item["id"],
-                        existing_source_path=src_p.relative_to(self._book_dir).as_posix(),
+                        existing_source_path=src_rel,
+                        archive_target_path=src_rel,
                         recommended_skill="dd-scene-cg-illustrator",
                     )
                 )
@@ -2052,7 +2616,15 @@ class ReaderExporter:
             for idx, (label, snippet) in enumerate(candidate_snippets[:2], start=1):
                 cg_id = f"cg_{ch_src.chapter_id}_{idx:02d}"
                 cg_asset = f"assets/cgs/{cg_id}.png"
-                cg_ready = (source_dir / cg_asset).is_file()
+                matched_cg = illus.get("catalog_map", {}).get(cg_asset)
+                cg_ready = _real_in_source(cg_asset) or matched_cg is not None
+                cg_archive_rel = self.compute_archive_path(
+                    "cg",
+                    chapter=chapter,
+                    volume_id=ch_src.volume_id,
+                    label=f"S{idx:02d}_{label}",
+                    settings=settings,
+                ).relative_to(self._book_dir).as_posix()
                 resources.append(
                     ReaderResourceRequirement(
                         asset_path=cg_asset,
@@ -2062,7 +2634,12 @@ class ReaderExporter:
                         recommended_size="1920x1080 (16:9 横幅宽屏，破框全屏演出)",
                         reason=f"推荐作为 break_frame=true + standalone_page 高潮插图（线索：{snippet}）",
                         unlock_gallery_id=cg_id,
-                        existing_source_path=f"source/{cg_asset}" if cg_ready else None,
+                        existing_source_path=(
+                            matched_cg.relative_to(self._book_dir).as_posix()
+                            if matched_cg is not None
+                            else (f"source/{cg_asset}" if _real_in_source(cg_asset) else None)
+                        ),
+                        archive_target_path=cg_archive_rel,
                         recommended_skill="dd-scene-cg-illustrator",
                     )
                 )
@@ -2180,14 +2757,14 @@ class ReaderExporter:
                 "",
                 "## 2. 视觉资源需求清单（立绘 / 场景 / CG / 头像 / 封面）",
                 "",
-                "| 类别 | 资源名称 | 作品包目标路径 | 当前状态 | 推荐规格 | 建议协同技能 | 说明 |",
-                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+                "| 类别 | 资源名称 | 项目归档真源路径 (`04_创作/插画/`) | 作品包内路径 | 当前状态 | 推荐规格 | 建议协同技能 | 说明 |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
             ]
         )
         for req in resources:
             lines.append(
-                f"| `{req.category}` | {req.title} | `{req.asset_path}` | {status_badge[req.status]} "
-                f"| {req.recommended_size} | `{req.recommended_skill or '-'}` | {req.reason} |"
+                f"| `{req.category}` | {req.title} | `{req.archive_target_path or '-'}` | `{req.asset_path}` "
+                f"| {status_badge[req.status]} | {req.recommended_size} | `{req.recommended_skill or '-'}` | {req.reason} |"
             )
 
         if stage_outline.get("diegetic_card_candidates"):
@@ -2200,7 +2777,7 @@ class ReaderExporter:
                 "",
                 "## 4. 建议下一步执行路径",
                 "",
-                "1. **优先补齐缺失美术**：对标注「缺失待绘」或「待绘差分」的角色立绘调用 `dd-character-illustrator`（透明底、脚底贴底、同角色统一画布尺寸），对剧情 CG/场景图调用 `dd-scene-cg-illustrator`；",
+                "1. **优先补齐并项目内归档**：所有生成的立绘、头像、场景背景、剧情 CG、封面与横幅，必须先通过 `novel_reader_archive_asset`（或 `ddnovel reader archive`）归档落盘至上表对应的项目目录 `04_创作/插画/...` 并登记 `资产清单.yaml`，严禁仅留在临时缓存目录；",
                 "2. **先占位预演**：如需先看分页与 2.5D 舞台节奏，可执行 `ddnovel reader export -c "
                 f"{ch_src.chapter}` 或调用 `ddbook_generate_placeholder_assets` 生成轻量合法 RGBA 占位图；",
                 "3. **精修与真机验证**：通过 `ddnovel-reader` MCP (`ddbook_upsert_chapter` / `ddbook_preview_stage` / `ddbook_preview_codex` / `ddbook_validate_target(strict=true)`) 精修镜头与防剧透锚点，最后打包 `.ddbook` 或增量 `.ddpatch`。",
@@ -2554,16 +3131,18 @@ class ReaderExporter:
         ready_resources: list[dict[str, Any]] = []
         missing_resources: list[dict[str, Any]] = []
 
-        # 建立可自动拷贝的真实插画映射表
-        real_source_map: dict[str, Path] = {}
+        # 建立可自动拷贝的真实插画映射表（资产台账最高优先，其次各分类归档目录）
+        real_source_map: dict[str, Path] = dict(illus.get("catalog_map", {}))
         if illus.get("cover") is not None:
-            real_source_map["assets/cover.png"] = illus["cover"]
+            real_source_map.setdefault("assets/cover.png", illus["cover"])
         if illus.get("banner") is not None:
-            real_source_map["assets/banner.png"] = illus["banner"]
+            real_source_map.setdefault("assets/banner.png", illus["banner"])
+        for cid, avatar_path in illus.get("char_avatars", {}).items():
+            real_source_map.setdefault(f"assets/portraits/{cid}_badge.png", avatar_path)
 
         for meta in chapter_metas.values():
             for cg_item in meta.get("cg_assets_used", []):
-                real_source_map[cg_item["asset"]] = cg_item["source_file"]
+                real_source_map.setdefault(cg_item["asset"], cg_item["source_file"])
             for cid, expr_map in meta.get("used_sprites", {}).items():
                 char_map = illus.get("char_sprites", {}).get(cid, {})
                 fallback_base = (
@@ -2574,11 +3153,11 @@ class ReaderExporter:
                 for expr_id, info in expr_map.items():
                     matched = char_map.get(expr_id) or (char_map.get("neutral") if expr_id == "neutral" else None) or fallback_base
                     if matched is not None:
-                        real_source_map[info["asset"]] = matched
+                        real_source_map.setdefault(info["asset"], matched)
             for bg_asset in meta.get("used_backgrounds", {}):
                 slug = Path(bg_asset).stem.lower()
                 if slug in illus.get("backgrounds", {}):
-                    real_source_map[bg_asset] = illus["backgrounds"][slug]
+                    real_source_map.setdefault(bg_asset, illus["backgrounds"][slug])
 
         for asset_rel in sorted(referenced_assets):
             dest = source_dir / asset_rel
@@ -2594,7 +3173,7 @@ class ReaderExporter:
                         "placeholder": False,
                     }
                 )
-            elif dest.is_file() and dest.stat().st_size > 0:
+            elif dest.is_file() and dest.stat().st_size > 0 and not is_placeholder_png(dest):
                 ready_resources.append(
                     {
                         "asset_path": asset_rel,
@@ -2661,6 +3240,10 @@ class ReaderExporter:
         )
         source_dir = out_root / "source"
         source_dir.mkdir(parents=True, exist_ok=True)
+
+        # 若 source/assets/ 中已放入手工/模型直写的真实图片（非占位图），自动反向归档至项目 04_创作/插画/
+        if (source_dir / "assets").is_dir():
+            self.sync_assets_to_archive(source_dir=source_dir)
 
         settings = self._load_settings()
         volumes = self._load_volumes()
@@ -2867,6 +3450,10 @@ class ReaderExporter:
         source_dir = out_root / "source"
         source_dir.mkdir(parents=True, exist_ok=True)
 
+        # 若 source/assets/ 中已放入手工/模型直写的真实图片（非占位图），自动反向归档至项目 04_创作/插画/
+        if (source_dir / "assets").is_dir():
+            self.sync_assets_to_archive(source_dir=source_dir)
+
         settings = self._load_settings()
         volumes = self._load_volumes()
         relations = self._load_relations()
@@ -3065,14 +3652,17 @@ class ReaderExporter:
 
 __all__ = [
     "DDNOVEL_READER_DIR_ENV_VAR",
+    "ArchivedAssetResult",
     "ChapterCastProfile",
     "ChapterResourcePlan",
     "ReaderExportResult",
     "ReaderExporter",
     "ReaderResourceRequirement",
     "ReaderValidationResult",
+    "SyncArchiveResult",
     "build_reader_patch",
     "discover_reader_dir",
+    "is_placeholder_png",
     "pack_reader_book",
     "resolve_reader_mcp_command",
     "resolve_reader_mcp_script",

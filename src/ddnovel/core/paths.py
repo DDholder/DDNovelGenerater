@@ -99,7 +99,12 @@ LEGACY_MANUSCRIPT_SUBDIR: Final[str] = "manuscript"
 ZH_ILLUSTRATIONS_SUBDIR: Final[str] = "插画"
 LEGACY_ILLUSTRATIONS_SUBDIR: Final[str] = "illustrations"
 ZH_CHARACTER_PORTRAITS_SUBDIR: Final[str] = "角色立绘"
+ZH_CHARACTER_AVATARS_SUBDIR: Final[str] = "角色头像"
+ZH_SCENE_BACKGROUNDS_SUBDIR: Final[str] = "场景背景"
 ZH_SCENE_CGS_SUBDIR: Final[str] = "场景CG"
+ZH_COVER_BANNER_SUBDIR: Final[str] = "封面与横幅"
+ZH_DYNAMIC_MEDIA_SUBDIR: Final[str] = "动态素材"
+ZH_ASSET_CATALOG_FILENAME: Final[str] = "资产清单.yaml"
 
 ZH_READER_PACK_SUBDIR: Final[str] = "阅读器作品包"
 LEGACY_READER_PACK_SUBDIR: Final[str] = "reader_pack"
@@ -418,6 +423,34 @@ def resolve_illustrations_dir(book_dir: Path | str, *, for_write: bool = False) 
         (LEGACY_CREATION_DIR, LEGACY_ILLUSTRATIONS_SUBDIR),
         for_write=for_write,
     )
+
+
+def resolve_character_portraits_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_CHARACTER_PORTRAITS_SUBDIR
+
+
+def resolve_character_avatars_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_CHARACTER_AVATARS_SUBDIR
+
+
+def resolve_scene_backgrounds_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_SCENE_BACKGROUNDS_SUBDIR
+
+
+def resolve_scene_cgs_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_SCENE_CGS_SUBDIR
+
+
+def resolve_cover_banner_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_COVER_BANNER_SUBDIR
+
+
+def resolve_dynamic_media_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_DYNAMIC_MEDIA_SUBDIR
+
+
+def resolve_asset_catalog_file(book_dir: Path | str, *, for_write: bool = False) -> Path:
+    return resolve_illustrations_dir(book_dir, for_write=for_write) / ZH_ASSET_CATALOG_FILENAME
 
 
 def resolve_reader_pack_dir(book_dir: Path | str, *, for_write: bool = False) -> Path:
@@ -1096,14 +1129,18 @@ __all__ = [
     "ZH_ACTIVE_SUBDIR",
     "ZH_ARCHIVE_SUBDIR",
     "ZH_ARCS_SUBDIR",
+    "ZH_ASSET_CATALOG_FILENAME",
     "ZH_AUTHOR_NOTES_DIR",
     "ZH_AUTHOR_NOTES_README_FILENAME",
     "ZH_BLUEPRINTS_SUBDIR",
+    "ZH_CHARACTER_AVATARS_SUBDIR",
     "ZH_CHARACTER_PORTRAITS_SUBDIR",
     "ZH_CHARACTERS_STATE_FILENAME",
     "ZH_CONFIG_FILENAME",
+    "ZH_COVER_BANNER_SUBDIR",
     "ZH_CREATION_DIR",
     "ZH_DRAFTS_SUBDIR",
+    "ZH_DYNAMIC_MEDIA_SUBDIR",
     "ZH_FACTIONS_STATE_FILENAME",
     "ZH_HISTORY_SUBDIR",
     "ZH_ILLUSTRATIONS_SUBDIR",
@@ -1112,6 +1149,7 @@ __all__ = [
     "ZH_PACKETS_SUBDIR",
     "ZH_READER_PACK_SUBDIR",
     "ZH_RELATIONS_FILENAME",
+    "ZH_SCENE_BACKGROUNDS_SUBDIR",
     "ZH_SCENE_CGS_SUBDIR",
     "ZH_SETTINGS_DIR",
     "ZH_STATE_DIR",
@@ -1156,13 +1194,18 @@ __all__ = [
     "resolve_archive_threads_file",
     "resolve_arc_file",
     "resolve_arcs_dir",
+    "resolve_asset_catalog_file",
     "resolve_author_notes_root",
     "resolve_blueprint_file",
     "resolve_blueprints_dir",
+    "resolve_character_avatars_dir",
+    "resolve_character_portraits_dir",
     "resolve_config_path",
+    "resolve_cover_banner_dir",
     "resolve_creation_root",
     "resolve_draft_file",
     "resolve_drafts_dir",
+    "resolve_dynamic_media_dir",
     "resolve_facts_file",
     "resolve_history_dir",
     "resolve_illustrations_dir",
@@ -1173,6 +1216,8 @@ __all__ = [
     "resolve_packets_dir",
     "resolve_reader_pack_dir",
     "resolve_relations_file",
+    "resolve_scene_backgrounds_dir",
+    "resolve_scene_cgs_dir",
     "resolve_setting_dir",
     "resolve_setting_file",
     "resolve_settings_root",

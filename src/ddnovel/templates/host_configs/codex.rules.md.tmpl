@@ -28,5 +28,6 @@
 5. **视觉衍生 · 角色立绘 (`dd-character-illustrator`) 与章节场景 CG (`dd-scene-cg-illustrator`)**：
    - 绘制角色图时读取 `01_设定集/人物/` 与当前状态，套用明亮通透、柔光半厚涂的商业级日系二次元角色立绘画风出图并按角色归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/`。
    - 绘制章节场景 CG 时读取指定章节正文与关联设定，**必须先精选 3～5 个候选场景呈报给作者确认**，确认后再套用轻小说/游戏剧情 CG 画风逐一绘制并按分卷归档至 `04_创作/插画/场景CG/第XX卷/`。
-6. **阅读器交付 · DDNovelReader 作品包适配 (`dd-reader-packager`)**：
+6. **阅读器交付 · DDNovelReader 作品包适配 (`dd-reader-packager`) 与项目内资产归档铁律**：
    - 协同 `novel_reader_*` 与 `ddbook_*` MCP（或 `ddnovel reader` CLI）将当前全书或单独一章导出封装为合规 `.ddbook` / `.ddpatch`；单章设计前**必须先提出视觉资源需求清单（立绘/差分、头像、背景、CG 及已有/缺失状态）**待作者确认。
+   - **过程资产强制归档项目底下**：创作与伴读设计中生成的一切图片/媒体资产（角色立绘与差分、角色头像、场景背景、剧情 CG、封面横幅、动态素材等），**必须立即通过 `novel_reader_archive_asset`（或 `ddnovel reader archive`）归档至当前小说项目的 `04_创作/插画/` 对应分类目录并登记 `资产清单.yaml`**，严禁仅留在 `$CODEX_HOME/generated_images/` 等临时目录或仅孤立存放于 `source/assets/`。

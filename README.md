@@ -57,6 +57,11 @@ Codex Desktop、ChatGPT Desktop（Codex / Work 本地模式）与 Codex CLI 共�
   uv run ddnovel reader export -d <book_dir> -c 1 --no-pack
   uv run ddnovel reader export -d <book_dir> -c 2 --patch-from ./old.ddbook
   ```
+- **过程图片与媒体资产项目内归档**（归档至 `04_创作/插画/` 对应分类子目录并维护 `资产清单.yaml`，自动同步入包）：
+  ```bash
+  uv run ddnovel reader archive ./gen.png -d <book_dir> -C sprite -e char_lin --expression alert
+  uv run ddnovel reader archive -d <book_dir> --sync-from-source
+  ```
 - **一键为 AI 宿主同时接入 `ddnovel` 与 `ddnovel-reader` 双 MCP**：
   ```bash
   uv run ddnovel host install antigravity --reader-dir D:/work/AI/proj/DDNovelReader
