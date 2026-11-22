@@ -57,6 +57,8 @@ SKILL_ROLES: Final[tuple[str, ...]] = (
     "dd-structure-planner",
     "dd-chapter-writer",
     "dd-state-curator",
+    "dd-character-illustrator",
+    "dd-scene-cg-illustrator",
 )
 
 BOOK_SKELETON_DIRS: Final[tuple[str, ...]] = (

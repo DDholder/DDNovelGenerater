@@ -27,3 +27,6 @@
    - 必须通过 `invoke_subagent` 调用 `dd-chapter-writer` 独立子代理（`TypeName: "dd-chapter-writer"`）执行执笔。
    - 委派 `Prompt` 中**仅提供**以下最小必要信息：目标章号、单章写作包绝对路径（`<book_dir>/04_创作/写作包/第XXXX章_写作包.md`）与草稿落盘路径（`<book_dir>/04_创作/草稿/第XXXX章_草稿.md`）。**禁止在委派 Prompt 中附带 `00_作者设定/` 随笔、设定卡剧透、幕后真相（`truth_secret` / `[机密]`）或后续章节蓝图**。
 4. **Step 5 & Step 6 · 审校定稿与状态结算**：作者审定草稿后，激活 `dd-state-curator` 技能，依次执行 `novel_audit_consistency` -> `novel_promote_chapter`（定稿归档至 `04_创作/定稿/第XX卷/第XXXX章-<章节标题>.md`） -> `novel_record_chapter_outcome` -> 按需执行冷归档或卷浓缩瘦身。
+5. **视觉衍生 · 角色立绘与章节场景 CG**：
+   - 绘制角色图时激活 `dd-character-illustrator` 技能，读取 `01_设定集/人物/` 角色设定卡（按需核对 `03_状态/当前/人物状态.yaml`），套用既定商业级日系半厚涂角色立绘画风委派 `image-generator` 绘制并归档至 `04_创作/插画/角色立绘/`。
+   - 绘制章节场景图时激活 `dd-scene-cg-illustrator` 技能，读取指定章节正文与关联设定，**必须先精选 3～5 个候选场景给作者确认**，确认后再套用轻小说/游戏剧情 CG 画风委派 `image-generator` 绘制并归档至 `04_创作/插画/场景CG/`。
