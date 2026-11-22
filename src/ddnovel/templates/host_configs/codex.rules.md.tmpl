@@ -1,0 +1,30 @@
+# DDNovelGenerater · Codex / ChatGPT Desktop 编排规则
+
+## 1. 激活范围守卫（Scoped Activation）
+
+仅当当前工作区或目标目录包含小说真源标记（`小说配置.yaml` / `novel.yaml` 或 `01_设定集/` 目录），或用户明确发起 DDNovel 长篇小说创作任务时，应用以下全部规范；在其他非小说工程项目中保持静默，不干预常规研发工作。
+
+## 2. 书库路由规则
+
+{routing_section}
+
+## 3. 文账分离四维真源铁律与双层设定隔离
+
+1. **严格区分“作者工作区（`00_作者设定/`）”与“模型创作层（`01_设定集/`）”**：
+   - `00_作者设定/`（`00_author_notes/`）是面向作者的自由随笔、灵感、人设原稿、示范场景、台词片段与备忘区，**永不入库 `.ddnovel/index.sqlite`，也永不注入单章写作包**。
+   - `01_设定集/`（`01_settings/`）是面向模型的蒸馏设定卡，必须坚持 **“三留三剥离”**：只保留客观属性、抽象性格机制、规则/能力边界（及 `## [机密]`），剥离具象场景片段、示范台词与动作指令清单；写入后留意 `abstraction_warnings`，必要时执行 `ddnovel setting lint` 复核。
+2. **严格区分“剧情内演进”与“作者改设定”**：
+   - 角色突破/重伤/退场、城池损毁、势力变更或关系反转等**剧情内演进**，严禁删改 `01_设定集/` 静态底卡；必须通过 `novel_record_chapter_outcome`（或 `ddnovel state update`）覆写 `03_状态/` 当前状态截面与双时态关系边。
+   - **作者中途修改或删除既有设定**前，必须先执行 `novel_setting_impact`（或 `ddnovel setting impact`）五维防吃书扫描，确认影响面后再改动并调用 `novel_sync_index` 热同步索引。
+3. **禁止手动篡改派生缓存**：`.ddnovel/index.sqlite` 为派生检索缓存，只通过 `novel_sync_index` 或 `ddnovel index sync/rebuild` 维护。
+
+## 4. 六大专项技能协同与 Step 4 执笔隔离原则
+
+1. **Step 1 · 设定维护 (`dd-setting-architect`)**：按需读取 `00_作者设定/` 原稿并执行“三留三剥离”抽象提炼，维护 `01_设定集/<分类>/<id>-<对象名>.md` 与三级切片（`## [核心]` / `## [专题: X]` / `## [机密]`）。**其余技能默认严禁扫读 `00_作者设定/`**。
+2. **Step 2 & Step 3 · 结构规划与写作包编译 (`dd-structure-planner`)**：先运行 `novel_foreshadow_radar` 巡检伏笔，完成三级结构蓝图后调用 `novel_build_packet` 编译 `04_创作/写作包/第XXXX章_写作包.md`。
+3. **Step 4 · 单包独立执笔 (`dd-chapter-writer`)**：
+   - 严格恪守**上下文隔离铁律**：优先在独立空白会话或独立子代理中执行执笔；仅读取单章独立写作包 `04_创作/写作包/第XXXX章_写作包.md`（或调用 `novel_read_packet`），严禁读取 `00_作者设定/`、`01_设定集/`、`02_结构/`、`03_状态/`、`04_创作/定稿/` 或调用全库检索/雷达工具以防剧透，完成后落盘至 `04_创作/草稿/第XXXX章_草稿.md`（`novel_save_draft`）。
+4. **Step 5 & Step 6 · 审校定稿与状态结算 (`dd-state-curator`)**：草稿审定后依次执行 `novel_audit_consistency` -> `novel_promote_chapter` -> `novel_record_chapter_outcome`，并按需执行冷归档或卷浓缩瘦身。
+5. **视觉衍生 · 角色立绘 (`dd-character-illustrator`) 与章节场景 CG (`dd-scene-cg-illustrator`)**：
+   - 绘制角色图时读取 `01_设定集/人物/` 与当前状态，套用明亮通透、柔光半厚涂的商业级日系二次元角色立绘画风出图并按角色归档至 `04_创作/插画/角色立绘/<实体ID>-<角色名>/`。
+   - 绘制章节场景 CG 时读取指定章节正文与关联设定，**必须先精选 3～5 个候选场景呈报给作者确认**，确认后再套用轻小说/游戏剧情 CG 画风逐一绘制并按分卷归档至 `04_创作/插画/场景CG/第XX卷/`。

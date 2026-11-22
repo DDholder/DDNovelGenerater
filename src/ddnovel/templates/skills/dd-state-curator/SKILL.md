@@ -8,6 +8,7 @@ compatibility:
   - dsh
   - claude
   - antigravity
+  - codex
 triggers:
   - 场记
   - 审校员
@@ -41,6 +42,7 @@ metadata:
     - dsh
     - claude
     - antigravity
+    - codex
   ssot_directories:
     - "03_状态/世界状态.yaml"
     - "03_状态/当前/人物状态.yaml"

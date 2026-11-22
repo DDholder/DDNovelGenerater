@@ -2008,7 +2008,8 @@
             "opencode",
             "dsh",
             "claude",
-            "antigravity"
+            "antigravity",
+            "codex"
           ],
           "title": "HostKind",
           "type": "string"

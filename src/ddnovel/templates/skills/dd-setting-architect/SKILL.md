@@ -8,6 +8,7 @@ compatibility:
   - dsh
   - claude
   - antigravity
+  - codex
 triggers:
   - 设定师
   - 世界观设定
@@ -39,6 +40,7 @@ metadata:
     - dsh
     - claude
     - antigravity
+    - codex
   ssot_directories:
     - "00_作者设定"
     - "01_设定集/世界观"

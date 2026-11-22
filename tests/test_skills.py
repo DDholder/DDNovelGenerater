@@ -82,7 +82,7 @@ def test_skill_file_exists_and_frontmatter_conforms_to_opencode_and_dsh_specs(ro
 
     compatibility = fm.get("compatibility")
     assert isinstance(compatibility, list)
-    assert {"opencode", "dsh", "claude", "antigravity"} <= set(compatibility)
+    assert {"opencode", "dsh", "claude", "antigravity", "codex"} <= set(compatibility)
 
     triggers = fm.get("triggers")
     assert isinstance(triggers, list) and len(triggers) >= 3
@@ -95,7 +95,7 @@ def test_skill_file_exists_and_frontmatter_conforms_to_opencode_and_dsh_specs(ro
     # 2. 扩展 metadata 结构校验
     meta = fm.get("metadata")
     assert isinstance(meta, dict)
-    assert meta.get("hosts") == ["opencode", "dsh", "claude", "antigravity"]
+    assert meta.get("hosts") == ["opencode", "dsh", "claude", "antigravity", "codex"]
     assert isinstance(meta.get("role"), str) and meta["role"]
     assert isinstance(meta.get("display_name"), str) and meta["display_name"]
     assert isinstance(meta.get("phase"), str) and meta["phase"]
@@ -456,8 +456,12 @@ def test_character_illustrator_skill_domain_requirements():
     for required_token in (
         "01_设定集/人物",
         "03_状态/当前/人物状态.yaml",
-        "04_创作/插画/角色立绘",
-        "日系高精细二次元美少女插画，精致商业级游戏角色立绘，半厚涂数码绘画质感，细腻柔和的色彩渐变，精美的人物五官，清澈晶莹的眼眸，纤细流畅的发丝，通透柔润的肌肤，精致服装剪裁，丰富的蕾丝与饰品细节，真实细腻的材质表现。高完成度商业插画，精细数码上色，细节丰富但画面整洁，人物优先，柔和光影塑造立体感，兼具二次元美感与半写实质感。",
+        "04_创作/插画/角色立绘/<实体ID>-<角色名>/",
+        "柔润细腻的半厚涂数码绘画质感",
+        "三分之二微侧身（3/4 view）",
+        "plush full curvy thighs with soft rounded volume",
+        "soft airbrushed seamless skin shading",
+        "masterpiece, best quality",
         "image-generator",
     ):
         assert required_token in body, f"dd-character-illustrator 缺少关键规范内容: {required_token}"
@@ -473,11 +477,14 @@ def test_scene_cg_illustrator_skill_domain_requirements():
     for required_token in (
         "04_创作/定稿",
         "04_创作/草稿",
-        "04_创作/插画/角色立绘",
-        "04_创作/插画/场景CG",
+        "04_创作/插画/角色立绘/<实体ID>-<角色名>/",
+        "04_创作/插画/场景CG/第XX卷/",
         "强制人工确认门禁",
         "ask_question",
-        "日系高精细商业插画，轻小说/游戏剧情 CG 质感，半厚涂数码绘画，电影感光影与景深，人物五官精致、发丝细腻，材质与环境写实，氛围浓烈但画面整洁。",
+        "柔润细腻的半厚涂数码绘画",
+        "plush full curvy thighs with soft rounded volume",
+        "soft airbrushed seamless skin shading",
+        "使用参考图中的同一角色",
         "image-generator",
     ):
         assert required_token in body, f"dd-scene-cg-illustrator 缺少关键规范内容: {required_token}"

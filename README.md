@@ -23,6 +23,23 @@ uv run pytest
   uv run ddnovel host sync -d <book_dir> -H antigravity
   ```
 
+### ChatGPT / Codex 桌面版集成
+
+Codex Desktop、ChatGPT Desktop（Codex / Work 本地模式）与 Codex CLI 共享同一套本地配置标准（`config.toml` + `AGENTS.md` + `SKILL.md`），支持 `codex` 或别名 `chatgpt`：
+
+- **全局安装（一引擎驱动多本书，写入 `~/.codex/`，推荐）**：
+  ```bash
+  uv run ddnovel host install codex
+  # 或使用别名：
+  uv run ddnovel host install chatgpt
+  ```
+- **单书工作区自包含配置（写入 `.codex/config.toml`、`AGENTS.md` 与 `.agents/skills/`）**：
+  ```bash
+  uv run ddnovel init <book_dir> -H codex
+  # 或为已有书库增量同步（同样支持 -H chatgpt）：
+  uv run ddnovel host sync -d <book_dir> -H chatgpt
+  ```
+
 可选向量检索插件：`uv sync --extra vector`
 
 ## 文档

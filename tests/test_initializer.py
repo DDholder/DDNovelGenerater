@@ -679,3 +679,113 @@ def test_init_book_creates_author_notes_layer_and_host_isolation_rules(tmp_path:
     init_book(minimal_dir, title="极简双层测试", include_samples=False)
     minimal_readme = minimal_dir / ZH_AUTHOR_NOTES_DIR / ZH_AUTHOR_NOTES_README_FILENAME
     assert minimal_readme.is_file()
+
+
+def test_init_book_and_render_host_configs_codex_and_chatgpt_alias_workspace_bundle(tmp_path: Path):
+    """验证 Codex Desktop / ChatGPT Desktop 工作区级配置（.codex/config.toml、AGENTS.md、.agents/skills/）。"""
+    import tomllib
+
+    book_dir = tmp_path / "codex_novel"
+    res = init_book(book_dir, title="镜湖夜话", hosts=["chatgpt"])
+    assert res.config.hosts == [HostKind.CODEX]
+
+    cfg_path = book_dir / ".codex" / "config.toml"
+    agents_path = book_dir / "AGENTS.md"
+    skills_root = book_dir / ".agents" / "skills"
+
+    assert cfg_path.is_file()
+    assert agents_path.is_file()
+    for role in SKILL_ROLES:
+        assert (skills_root / role / "SKILL.md").is_file()
+
+    # 1. 验证 TOML 格式与书库绑定路径
+    parsed = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    dd_srv = parsed["mcp_servers"]["ddnovel"]
+    assert dd_srv["command"] == "ddnovel-mcp"
+    assert dd_srv["args"] == []
+    assert dd_srv["cwd"] == book_dir.resolve().as_posix()
+    assert dd_srv["enabled"] is True
+    assert dd_srv["env"] == {"DDNOVEL_BOOK_DIR": book_dir.resolve().as_posix()}
+
+    # 2. 验证 AGENTS.md 受管区块与路由指引
+    agents_raw = agents_path.read_text(encoding="utf-8")
+    assert "<!-- DDNOVEL:START -->" in agents_raw
+    assert "<!-- DDNOVEL:END -->" in agents_raw
+    assert book_dir.resolve().as_posix() in agents_raw
+    assert "dd-character-illustrator" in agents_raw
+    assert "dd-scene-cg-illustrator" in agents_raw
+
+    # 3. 验证无损合并已有 TOML 与 overwrite=False 保护
+    cfg_path.write_text(
+        'model = "gpt-5.2"\n\n'
+        "[mcp_servers.other]\n"
+        'command = "other-mcp"\n'
+        "args = []\n\n"
+        "[mcp_servers.ddnovel]\n"
+        'command = "custom-ddnovel"\n'
+        "args = []\n",
+        encoding="utf-8",
+    )
+    agents_path.write_text("# My Custom Project Rules\n\nKeep code clean.\n", encoding="utf-8")
+
+    init = ProjectInitializer(mcp_command=["uv", "run", "ddnovel-mcp"])
+    init.render_host_configs(book_dir, ["codex"], overwrite=False, update_novel_yaml=False)
+    preserved_toml = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    assert preserved_toml["mcp_servers"]["ddnovel"]["command"] == "custom-ddnovel"
+    assert preserved_toml["mcp_servers"]["other"]["command"] == "other-mcp"
+    assert agents_path.read_text(encoding="utf-8").strip() == "# My Custom Project Rules\n\nKeep code clean."
+
+    # 4. overwrite=True 时仅替换 [mcp_servers.ddnovel] 并追加受管块，完整保留用户配置
+    init.render_host_configs(book_dir, ["codex"], overwrite=True, update_novel_yaml=False)
+    merged_toml = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+    assert merged_toml["model"] == "gpt-5.2"
+    assert merged_toml["mcp_servers"]["other"]["command"] == "other-mcp"
+    assert merged_toml["mcp_servers"]["ddnovel"]["command"] == "uv"
+    assert merged_toml["mcp_servers"]["ddnovel"]["args"] == ["run", "ddnovel-mcp"]
+
+    merged_agents = agents_path.read_text(encoding="utf-8")
+    assert "# My Custom Project Rules" in merged_agents
+    assert "Keep code clean." in merged_agents
+    assert "<!-- DDNOVEL:START -->" in merged_agents
+
+
+def test_install_global_codex_and_chatgpt_plugin(tmp_path: Path):
+    """验证全局 Codex / ChatGPT Desktop 安装（~/.codex/config.toml、AGENTS.md、skills/）。"""
+    import tomllib
+
+    fake_codex_home = tmp_path / ".codex"
+    fake_codex_home.mkdir()
+    (fake_codex_home / "config.toml").write_text('approval_policy = "on-request"\n', encoding="utf-8")
+    (fake_codex_home / "AGENTS.md").write_text("# Personal Global Rules\n", encoding="utf-8")
+
+    res = ProjectInitializer(mcp_command=["/opt/ddnovel/ddnovel-mcp"]).install_global_plugin(
+        "chatgpt",
+        plugin_dir=fake_codex_home,
+        overwrite=True,
+    )
+    assert res.host == HostKind.CODEX
+    assert res.plugin_dir == fake_codex_home.resolve()
+    assert res.mcp_command == ("/opt/ddnovel/ddnovel-mcp",)
+
+    parsed = tomllib.loads((fake_codex_home / "config.toml").read_text(encoding="utf-8"))
+    assert parsed["approval_policy"] == "on-request"
+    dd_srv = parsed["mcp_servers"]["ddnovel"]
+    assert dd_srv["command"] == "/opt/ddnovel/ddnovel-mcp"
+    assert dd_srv["args"] == []
+    assert dd_srv["enabled"] is True
+    assert "cwd" not in dd_srv
+    assert "env" not in dd_srv
+
+    agents_raw = (fake_codex_home / "AGENTS.md").read_text(encoding="utf-8")
+    assert "# Personal Global Rules" in agents_raw
+    assert "全局多书模式" in agents_raw
+    assert "book_dir" in agents_raw
+
+    for role in SKILL_ROLES:
+        skill_path = fake_codex_home / "skills" / role / "SKILL.md"
+        assert skill_path.is_file()
+        raw = skill_path.read_text(encoding="utf-8")
+        _, fm_yaml, _ = raw.split("---", 2)
+        fm = yaml.safe_load(fm_yaml)
+        assert set(fm.keys()) <= {"name", "description", "license", "allowed-tools", "metadata"}
+        assert "<" not in fm["description"] and ">" not in fm["description"]

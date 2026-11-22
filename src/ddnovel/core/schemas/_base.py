@@ -170,6 +170,7 @@ class HostKind(StrEnum):
     DSH = "dsh"
     CLAUDE = "claude"
     ANTIGRAVITY = "antigravity"
+    CODEX = "codex"
 
 
 class IssueLevel(StrEnum):

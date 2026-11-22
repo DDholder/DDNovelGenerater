@@ -8,6 +8,7 @@ compatibility:
   - dsh
   - claude
   - antigravity
+  - codex
 triggers:
   - 执笔人
   - 单包独立执笔人
@@ -30,6 +31,7 @@ metadata:
     - dsh
     - claude
     - antigravity
+    - codex
   ssot_directories:
     - "04_创作/写作包"
     - "04_创作/草稿"

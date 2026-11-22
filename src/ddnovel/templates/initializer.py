@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
+import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +85,20 @@ BOOK_SKELETON_DIRS: Final[tuple[str, ...]] = (
 _DEFAULT_TEMPLATES_DIR: Final[Path] = Path(__file__).resolve().parent
 ANTIGRAVITY_PLUGIN_NAME: Final[str] = "ddnovel"
 DEFAULT_ANTIGRAVITY_PLUGINS_DIR: Final[Path] = Path("~/.gemini/config/plugins")
+DEFAULT_CODEX_HOME_DIR: Final[Path] = Path("~/.codex")
+DEFAULT_AGENTS_SKILLS_DIR: Final[Path] = Path("~/.agents/skills")
+
+_HOST_ALIASES: Final[dict[str, HostKind]] = {
+    "chatgpt": HostKind.CODEX,
+    "chatgpt-desktop": HostKind.CODEX,
+    "codex-desktop": HostKind.CODEX,
+}
+_TOML_TABLE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*\[{1,2}\s*([^\]]+?)\s*\]{1,2}\s*(?:#.*)?$")
+_CODEX_MANAGED_COMMENT: Final[str] = (
+    "# DDNovelGenerater MCP server (Codex Desktop / ChatGPT Desktop / Codex CLI)"
+)
+_MANAGED_BLOCK_START: Final[str] = "<!-- DDNOVEL:START -->"
+_MANAGED_BLOCK_END: Final[str] = "<!-- DDNOVEL:END -->"
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +135,158 @@ def _render_frontmatter_md(frontmatter: dict[str, Any], body: str) -> str:
     if clean_body:
         return f"---\n{fm_yaml}\n---\n\n{clean_body}\n"
     return f"---\n{fm_yaml}\n---\n"
+
+
+def _normalize_toml_table_key(raw_header: str) -> str:
+    parts = [part.strip().strip('"').strip("'") for part in raw_header.split(".")]
+    return ".".join(parts)
+
+
+def _upsert_codex_mcp_toml(
+    existing_text: str,
+    *,
+    mcp_command: tuple[str, ...],
+    book_dir_posix: str | None,
+    overwrite: bool,
+) -> str | None:
+    """在 Codex / ChatGPT Desktop 的 config.toml 中无损合并 [mcp_servers.ddnovel] 配置段。"""
+    stripped = existing_text.strip()
+    if stripped:
+        try:
+            parsed = tomllib.loads(existing_text)
+        except tomllib.TOMLDecodeError:
+            if not overwrite:
+                return None
+            parsed = {}
+        mcp_servers = parsed.get("mcp_servers")
+        if not overwrite and isinstance(mcp_servers, dict) and ANTIGRAVITY_PLUGIN_NAME in mcp_servers:
+            return None
+
+    # 移除既有的 [mcp_servers.ddnovel] 及其子表，完整保留用户其他配置与注释
+    kept_lines: list[str] = []
+    skip_section = False
+    for line in existing_text.replace("\r\n", "\n").splitlines():
+        match = _TOML_TABLE_RE.match(line)
+        if match:
+            table_key = _normalize_toml_table_key(match.group(1))
+            if table_key == f"mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}" or table_key.startswith(
+                f"mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}."
+            ):
+                if kept_lines and kept_lines[-1].strip() == _CODEX_MANAGED_COMMENT:
+                    kept_lines.pop()
+                skip_section = True
+                continue
+            skip_section = False
+        if not skip_section:
+            kept_lines.append(line)
+
+    base_text = "\n".join(kept_lines).rstrip()
+
+    args_toml = ", ".join(json.dumps(arg, ensure_ascii=False) for arg in mcp_command[1:])
+    block_lines = [
+        _CODEX_MANAGED_COMMENT,
+        f"[mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}]",
+        f"command = {json.dumps(mcp_command[0], ensure_ascii=False)}",
+        f"args = [{args_toml}]",
+    ]
+    if book_dir_posix is not None:
+        block_lines.append(f"cwd = {json.dumps(book_dir_posix, ensure_ascii=False)}")
+    block_lines.append("enabled = true")
+    if book_dir_posix is not None:
+        block_lines.extend(
+            [
+                "",
+                f"[mcp_servers.{ANTIGRAVITY_PLUGIN_NAME}.env]",
+                f"DDNOVEL_BOOK_DIR = {json.dumps(book_dir_posix, ensure_ascii=False)}",
+            ]
+        )
+
+    new_block = "\n".join(block_lines)
+    merged = f"{base_text}\n\n{new_block}\n" if base_text else f"{new_block}\n"
+    # 写回前校验合并结果仍为合法 TOML
+    tomllib.loads(merged)
+    return merged
+
+
+def _upsert_managed_markdown_block(
+    existing_text: str | None,
+    content: str,
+    *,
+    overwrite: bool,
+) -> str | None:
+    """在 AGENTS.md 中写入或更新受管 DDNovel 区块，保留用户自定义指令。"""
+    managed_block = f"{_MANAGED_BLOCK_START}\n{content.strip()}\n{_MANAGED_BLOCK_END}"
+    if existing_text is None:
+        return f"{managed_block}\n"
+
+    normalized = existing_text.replace("\r\n", "\n")
+    start_idx = normalized.find(_MANAGED_BLOCK_START)
+    end_idx = normalized.find(_MANAGED_BLOCK_END)
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        if not overwrite:
+            return None
+        prefix = normalized[:start_idx].rstrip()
+        suffix = normalized[end_idx + len(_MANAGED_BLOCK_END) :].lstrip()
+        parts = [p for p in (prefix, managed_block, suffix) if p]
+        return "\n\n".join(parts) + "\n"
+
+    if not overwrite:
+        return None
+
+    trimmed = normalized.rstrip()
+    if not trimmed:
+        return f"{managed_block}\n"
+    return f"{trimmed}\n\n{managed_block}\n"
+
+
+def _render_codex_skill_markdown(raw_text: str) -> str:
+    """将多宿主 SKILL.md 清洗为符合 Codex / ChatGPT Desktop 严格校验规范的 Frontmatter。
+
+    Codex 仅允许顶层字段: name, description, license, allowed-tools, metadata（且 metadata 仅保留字符串键值）。
+    """
+    normalized = raw_text.replace("\r\n", "\n")
+    if not normalized.startswith("---\n"):
+        return normalized
+    end_idx = normalized.find("\n---\n", 4)
+    if end_idx == -1:
+        return normalized
+
+    fm_text = normalized[4:end_idx]
+    body = normalized[end_idx + 5 :]
+    try:
+        fm_data = yaml.safe_load(fm_text)
+    except yaml.YAMLError:
+        return normalized
+    if not isinstance(fm_data, dict):
+        return normalized
+
+    codex_fm: dict[str, Any] = {}
+    for key in ("name", "description", "license", "allowed-tools"):
+        if key in fm_data:
+            val = fm_data[key]
+            if key == "description" and isinstance(val, str):
+                val = val.replace("<", "{").replace(">", "}")
+            codex_fm[key] = val
+
+    raw_meta = fm_data.get("metadata")
+    if isinstance(raw_meta, dict):
+        codex_meta: dict[str, str] = {}
+        display_name = raw_meta.get("display_name")
+        phase = raw_meta.get("phase")
+        if isinstance(display_name, str) and display_name.strip():
+            short_desc = (
+                f"{display_name.strip()} · {phase.strip()}"
+                if isinstance(phase, str) and phase.strip()
+                else display_name.strip()
+            )
+            codex_meta["short-description"] = short_desc
+        for k, v in raw_meta.items():
+            if isinstance(v, str) and v.strip():
+                codex_meta[str(k)] = v.strip()
+        if codex_meta:
+            codex_fm["metadata"] = codex_meta
+
+    return _render_frontmatter_md(codex_fm, body)
 
 
 class ProjectInitializer:
@@ -180,12 +348,16 @@ class ProjectInitializer:
                 kind = item
             else:
                 raw_str = str(item).strip().lower()
-                try:
-                    kind = HostKind(raw_str)
-                except ValueError as exc:
-                    raise ValueError(
-                        f"不支持的宿主类型 {item!r}，可选值: {valid_values}"
-                    ) from exc
+                if raw_str in _HOST_ALIASES:
+                    kind = _HOST_ALIASES[raw_str]
+                else:
+                    try:
+                        kind = HostKind(raw_str)
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"不支持的宿主类型 {item!r}，可选值: {valid_values}"
+                            "（支持别名: chatgpt / chatgpt-desktop / codex-desktop -> codex）"
+                        ) from exc
             if kind not in seen:
                 seen.add(kind)
                 normalized.append(kind)
@@ -549,6 +721,17 @@ class ProjectInitializer:
                         overwrite=overwrite,
                     )
                 )
+            elif host == HostKind.CODEX:
+                written_files.extend(
+                    self._render_codex_bundle(
+                        config_path=target_dir / ".codex" / "config.toml",
+                        agents_md_path=target_dir / "AGENTS.md",
+                        skills_root=target_dir / ".agents" / "skills",
+                        mcp_command=self.mcp_command,
+                        book_dir_posix=book_dir_posix,
+                        overwrite=overwrite,
+                    )
+                )
 
         if update_novel_yaml and resolve_config_path(target_dir).is_file():
             cfg = NovelConfig.load(target_dir)
@@ -711,31 +894,58 @@ class ProjectInitializer:
         plugin_dir: Path | str | None = None,
         overwrite: bool = True,
     ) -> GlobalPluginInstallResult:
-        """安装或升级机器级全局 AI 宿主插件（当前支持 ``antigravity``）。"""
+        """安装或升级机器级全局 AI 宿主插件（支持 ``antigravity`` 与 ``codex`` / ``chatgpt``）。"""
         normalized = self._normalize_hosts([host])
         kind = normalized[0]
-        if kind != HostKind.ANTIGRAVITY:
+        if kind not in (HostKind.ANTIGRAVITY, HostKind.CODEX):
             raise ValueError(
-                "全局插件安装目前仅支持 'antigravity' 宿主；"
+                "全局插件安装目前支持 'antigravity' 与 'codex'（别名 'chatgpt'）宿主；"
                 "书库级配置请使用 ddnovel init -H <host> 或 ddnovel host sync"
             )
 
-        target_plugin_dir = (
-            Path(plugin_dir).expanduser().resolve()
-            if plugin_dir is not None
-            else (DEFAULT_ANTIGRAVITY_PLUGINS_DIR.expanduser().resolve() / ANTIGRAVITY_PLUGIN_NAME)
-        )
         effective_cmd = (
             self.mcp_command
             if self._has_explicit_mcp_command
             else resolve_global_mcp_command()
         )
-        written_files = self._render_antigravity_bundle(
-            target_plugin_dir,
-            mcp_command=effective_cmd,
-            book_dir_posix=None,
-            overwrite=overwrite,
-        )
+        if kind == HostKind.ANTIGRAVITY:
+            target_plugin_dir = (
+                Path(plugin_dir).expanduser().resolve()
+                if plugin_dir is not None
+                else (DEFAULT_ANTIGRAVITY_PLUGINS_DIR.expanduser().resolve() / ANTIGRAVITY_PLUGIN_NAME)
+            )
+            written_files = self._render_antigravity_bundle(
+                target_plugin_dir,
+                mcp_command=effective_cmd,
+                book_dir_posix=None,
+                overwrite=overwrite,
+            )
+        else:
+            target_plugin_dir = (
+                Path(plugin_dir).expanduser().resolve()
+                if plugin_dir is not None
+                else DEFAULT_CODEX_HOME_DIR.expanduser().resolve()
+            )
+            if plugin_dir is None:
+                # Codex / ChatGPT Desktop 同时扫描 ~/.agents/skills/ 与 ~/.codex/skills/；
+                # 全局技能统一写入标准目录 ~/.agents/skills/，并清理 ~/.codex/skills/ 下同名重复副本。
+                skills_target = DEFAULT_AGENTS_SKILLS_DIR.expanduser().resolve()
+                legacy_codex_skills = target_plugin_dir / "skills"
+                for role in SKILL_ROLES:
+                    dup_dir = legacy_codex_skills / role
+                    if dup_dir.is_dir():
+                        shutil.rmtree(dup_dir)
+            else:
+                skills_target = target_plugin_dir / "skills"
+            written_files = self._render_codex_bundle(
+                config_path=target_plugin_dir / "config.toml",
+                agents_md_path=target_plugin_dir / "AGENTS.md",
+                skills_root=skills_target,
+                mcp_command=effective_cmd,
+                book_dir_posix=None,
+                overwrite=overwrite,
+            )
+
         return GlobalPluginInstallResult(
             host=kind,
             plugin_dir=target_plugin_dir,
@@ -863,6 +1073,97 @@ class ProjectInitializer:
         written_files.extend(self._sync_host_skills(plugin_dir / "skills", overwrite=overwrite))
         return written_files
 
+    def _sync_codex_skills(self, skills_root: Path, *, overwrite: bool) -> list[Path]:
+        """将全部角色技能清洗为 Codex / ChatGPT Desktop 规范后同步到目标技能目录。"""
+        skills_root.mkdir(parents=True, exist_ok=True)
+        copied: list[Path] = []
+        for role in SKILL_ROLES:
+            dst_role_dir = skills_root / role
+            dst_role_dir.mkdir(parents=True, exist_ok=True)
+
+            src_role_dir = self.skills_source_dir / role
+            if not src_role_dir.is_dir():
+                continue
+
+            for src_file in sorted(src_role_dir.rglob("*")):
+                if not src_file.is_file():
+                    continue
+                rel_file = src_file.relative_to(src_role_dir)
+                dst_file = dst_role_dir / rel_file
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                if not dst_file.exists() or overwrite:
+                    if src_file.name == "SKILL.md":
+                        rendered = _render_codex_skill_markdown(src_file.read_text(encoding="utf-8"))
+                        dst_file.write_text(rendered, encoding="utf-8")
+                    else:
+                        shutil.copy2(src_file, dst_file)
+                    copied.append(dst_file)
+        return copied
+
+    def _render_codex_bundle(
+        self,
+        *,
+        config_path: Path,
+        agents_md_path: Path,
+        skills_root: Path,
+        extra_skills_roots: Sequence[Path] = (),
+        mcp_command: tuple[str, ...],
+        book_dir_posix: str | None,
+        overwrite: bool,
+    ) -> list[Path]:
+        """渲染 Codex Desktop / ChatGPT Desktop / Codex CLI 配置包（config.toml / AGENTS.md / skills）。"""
+        written_files: list[Path] = []
+
+        # 1. config.toml（无损合并 [mcp_servers.ddnovel]，保留用户其余 TOML 配置与注释）
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_toml = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+        merged_toml = _upsert_codex_mcp_toml(
+            existing_toml,
+            mcp_command=mcp_command,
+            book_dir_posix=book_dir_posix,
+            overwrite=overwrite,
+        )
+        if merged_toml is not None:
+            config_path.write_text(merged_toml, encoding="utf-8")
+            written_files.append(config_path)
+
+        # 2. AGENTS.md（使用受管区块 <!-- DDNOVEL:START -->...<!-- DDNOVEL:END -->，不破坏用户自定义规则）
+        agents_md_path.parent.mkdir(parents=True, exist_ok=True)
+        if book_dir_posix is not None:
+            routing_section = (
+                f"- 当前工作区已绑定固定小说书库根目录：`{book_dir_posix}`"
+                "（已在 `.codex/config.toml` 注入 `DDNOVEL_BOOK_DIR`）。\n"
+                f"- 调用 `novel_*` MCP 工具时可省略 `book_dir` 或显式传入 `{book_dir_posix}`；"
+                f"执行 `ddnovel` CLI 命令时在书库根目录运行或传入 `-d {book_dir_posix}`。"
+            )
+        else:
+            routing_section = (
+                "- 当前 Codex / ChatGPT Desktop 配置以**全局多书模式**运行（未硬编码 `DDNOVEL_BOOK_DIR`），"
+                "支持一引擎驱动多本小说书库。\n"
+                "- 调用任何 `novel_*` MCP 工具时，**必须显式传入目标书库根目录路径 `book_dir`**"
+                "（例如当前打开的小说工作区路径）；\n"
+                "- 执行 `ddnovel` CLI 命令时，**必须传入 `-d <book_dir>`**（或在目标书库目录下运行），"
+                "确保不会读写错误书库。"
+            )
+        rules_tmpl = (self.host_configs_dir / "codex.rules.md.tmpl").read_text(encoding="utf-8")
+        rendered_rules = rules_tmpl.format(routing_section=routing_section)
+        existing_agents = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
+        merged_agents = _upsert_managed_markdown_block(
+            existing_agents,
+            rendered_rules,
+            overwrite=overwrite,
+        )
+        if merged_agents is not None:
+            agents_md_path.write_text(merged_agents, encoding="utf-8")
+            written_files.append(agents_md_path)
+
+        # 3. skills/<role>/SKILL.md（清洗为 Codex 合规 Frontmatter，同步至主目录及全局 ~/.agents/skills/）
+        written_files.extend(self._sync_codex_skills(skills_root, overwrite=overwrite))
+        for extra_root in extra_skills_roots:
+            if extra_root.resolve() != skills_root.resolve():
+                written_files.extend(self._sync_codex_skills(extra_root, overwrite=overwrite))
+        return written_files
+
 
 def resolve_global_mcp_command(
     explicit_mcp_command: Sequence[str] | str | None = None,
@@ -899,6 +1200,20 @@ def install_antigravity_plugin(
     )
 
 
+def install_codex_plugin(
+    *,
+    plugin_dir: Path | str | None = None,
+    mcp_command: Sequence[str] | str | None = None,
+    overwrite: bool = True,
+) -> GlobalPluginInstallResult:
+    """快捷安装或更新本机全局 Codex / ChatGPT Desktop ``ddnovel`` 配置与技能。"""
+    return ProjectInitializer(mcp_command=mcp_command).install_global_plugin(
+        HostKind.CODEX,
+        plugin_dir=plugin_dir,
+        overwrite=overwrite,
+    )
+
+
 def init_book(
     book_dir: Path | str,
     *,
@@ -927,11 +1242,13 @@ __all__ = [
     "ANTIGRAVITY_PLUGIN_NAME",
     "BOOK_SKELETON_DIRS",
     "DEFAULT_ANTIGRAVITY_PLUGINS_DIR",
+    "DEFAULT_CODEX_HOME_DIR",
     "GlobalPluginInstallResult",
     "InitBookResult",
     "ProjectInitializer",
     "SKILL_ROLES",
     "init_book",
     "install_antigravity_plugin",
+    "install_codex_plugin",
     "resolve_global_mcp_command",
 ]

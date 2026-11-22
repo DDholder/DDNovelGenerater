@@ -8,6 +8,7 @@ compatibility:
   - dsh
   - claude
   - antigravity
+  - codex
 triggers:
   - 结构规划师
   - 规划师
@@ -38,6 +39,7 @@ metadata:
     - dsh
     - claude
     - antigravity
+    - codex
   ssot_directories:
     - "02_结构/总纲.md"
     - "02_结构/分卷"

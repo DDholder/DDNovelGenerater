@@ -1,0 +1,5 @@
+# DDNovelGenerater MCP server (Codex Desktop / ChatGPT Desktop / Codex CLI)
+[mcp_servers.ddnovel]
+command = "ddnovel-mcp"
+args = []
+enabled = true
