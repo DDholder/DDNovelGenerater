@@ -965,17 +965,15 @@ class ProjectInitializer:
                 if plugin_dir is not None
                 else DEFAULT_CODEX_HOME_DIR.expanduser().resolve()
             )
+            skills_target = target_plugin_dir / "skills"
             if plugin_dir is None:
-                # Codex / ChatGPT Desktop 同时扫描 ~/.agents/skills/ 与 ~/.codex/skills/；
-                # 全局技能统一写入标准目录 ~/.agents/skills/，并清理 ~/.codex/skills/ 下同名重复副本。
-                skills_target = DEFAULT_AGENTS_SKILLS_DIR.expanduser().resolve()
-                legacy_codex_skills = target_plugin_dir / "skills"
+                # 将 Codex / ChatGPT Desktop 全局技能隔离写入专属目录 ~/.codex/skills/，
+                # 并清理 ~/.agents/skills/ 下同名 dd-* 副本，避免与 Antigravity 插件技能产生双份重复。
+                shared_agents_skills = DEFAULT_AGENTS_SKILLS_DIR.expanduser().resolve()
                 for role in SKILL_ROLES:
-                    dup_dir = legacy_codex_skills / role
+                    dup_dir = shared_agents_skills / role
                     if dup_dir.is_dir():
                         shutil.rmtree(dup_dir)
-            else:
-                skills_target = target_plugin_dir / "skills"
             written_files = self._render_codex_bundle(
                 config_path=target_plugin_dir / "config.toml",
                 agents_md_path=target_plugin_dir / "AGENTS.md",

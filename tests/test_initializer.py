@@ -789,3 +789,29 @@ def test_install_global_codex_and_chatgpt_plugin(tmp_path: Path):
         fm = yaml.safe_load(fm_yaml)
         assert set(fm.keys()) <= {"name", "description", "license", "allowed-tools", "metadata"}
         assert "<" not in fm["description"] and ">" not in fm["description"]
+
+
+def test_install_global_codex_isolates_skills_from_shared_agents_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """验证默认全局安装 codex 时写入 ~/.codex/skills/ 并清理 ~/.agents/skills/dd-*，防止 Antigravity 技能重复。"""
+    import ddnovel.templates.initializer as init_mod
+
+    fake_codex_home = tmp_path / ".codex"
+    fake_agents_skills = tmp_path / ".agents" / "skills"
+    (fake_agents_skills / "dd-reader-packager").mkdir(parents=True)
+    (fake_agents_skills / "dd-reader-packager" / "SKILL.md").write_text("old dup", encoding="utf-8")
+    (fake_agents_skills / "third-party-skill").mkdir(parents=True)
+    (fake_agents_skills / "third-party-skill" / "SKILL.md").write_text("keep me", encoding="utf-8")
+
+    monkeypatch.setattr(init_mod, "DEFAULT_CODEX_HOME_DIR", fake_codex_home)
+    monkeypatch.setattr(init_mod, "DEFAULT_AGENTS_SKILLS_DIR", fake_agents_skills)
+
+    ProjectInitializer(mcp_command=["/opt/ddnovel/ddnovel-mcp"]).install_global_plugin("codex")
+
+    for role in SKILL_ROLES:
+        assert (fake_codex_home / "skills" / role / "SKILL.md").is_file()
+        assert not (fake_agents_skills / role).exists()
+    # 第三方非 ddnovel 技能必须完整保留
+    assert (fake_agents_skills / "third-party-skill" / "SKILL.md").read_text(encoding="utf-8") == "keep me"
