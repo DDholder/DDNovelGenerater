@@ -498,3 +498,53 @@ def test_archive_generated_assets_under_project_and_reverse_sync_skips_placehold
         assert payload["action"] == "sync_from_source"
 
     asyncio.run(_run_mcp_archive())
+
+
+def test_plan_chapter_proposes_rich_poses_outfits_expressions_and_appeal_cgs(
+    tmp_path: Path,
+) -> None:
+    """验证单章规划主动提出多表情差分、动作差分、不同装扮以及魅力特写/情感/主角贴贴多类 CG。"""
+    book_dir = _create_rich_novel_book(tmp_path)
+    ms_dir = book_dir / "04_创作" / "定稿" / "第01卷"
+    (ms_dir / "第0003章-月下礼服与贴贴.md").write_text(
+        "# 第3章 月下礼服与贴贴\n\n"
+        "月光洒满窗边，林岚换上一袭优雅的晚礼服，微风吹动发丝，她回眸望来，眼眸清亮动人。\n\n"
+        "林岚脸红着轻轻俯身凑近，靠在肩头低声耳语：「别笑我……这身礼服是不是太显眼了？」\n\n"
+        "沈砚温柔地牵起林岚的手，指尖相触，替她拂去发丝间沾染的水珠：「很美，比星海还耀眼。」\n\n"
+        "林岚挑眉狡黠一笑，与他十指相扣并肩依偎在窗台前。\n",
+        encoding="utf-8",
+    )
+
+    exporter = ReaderExporter(book_dir)
+    plan = exporter.plan_chapter_resources(3)
+
+    sprites = [r for r in plan.resources if r.category == "sprite"]
+    cgs = [r for r in plan.resources if r.category == "cg"]
+
+    # 验证检出了丰富表情差分（blush / tease / tender）、动作差分（pose）与礼服换装（formal）
+    expressions = {r.expression for r in sprites}
+    poses = {r.pose for r in sprites if r.pose}
+    outfits = {r.outfit for r in sprites if r.outfit}
+    assert {"blush", "tease", "tender"} <= expressions
+    assert "lean_close" in poses or "turn_back" in poses
+    assert "formal" in outfits
+
+    # 验证提出了多维度高魅力 CG（主角贴贴 + 角色魅力特写 + 情感瞬间）
+    cg_kinds = {r.cg_kind for r in cgs if r.cg_kind}
+    assert {"intimacy", "charm_closeup", "emotion"} <= cg_kinds
+    assert len(cgs) >= 3
+
+    # 验证支持归档带装扮 + 动作差分的立绘
+    tmp_img = tmp_path / "lin_formal_lean_blush.png"
+    tmp_img.write_bytes(_make_real_png_bytes(250, 180, 200))
+    arch = exporter.archive_asset(
+        tmp_img,
+        category="sprite",
+        entity_id="char_lin",
+        outfit="礼服",
+        pose="lean_close",
+        expression="blush",
+    )
+    assert arch.archive_rel_path == "04_创作/插画/角色立绘/char_lin-林岚/char_lin-林岚_礼服_lean_close_blush.png"
+    assert arch.reader_asset_path == "assets/sprites/char_lin_formal_lean_close_blush.png"
+    assert arch.pose == "lean_close"

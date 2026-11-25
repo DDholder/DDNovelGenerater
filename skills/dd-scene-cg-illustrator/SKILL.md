@@ -1,6 +1,6 @@
 ---
 name: dd-scene-cg-illustrator
-description: "DDNovelGenerater 场景 CG 画师（Scene CG Illustrator）专项技能：针对作者指定的章节读取正文（定稿/草稿）与出场实体设定，先精选 3~5 个高表现力候选名场面呈报给用户确认（强制人工确认门禁），待用户勾选或微调确认后，结合已有角色立绘保持外观一致，严格套用轻小说/游戏剧情 CG 画风规范绘制高清场景 CG 并归档至 04_创作/插画/场景CG/。"
+description: "DDNovelGenerater 场景 CG 与角色魅力特写画师（Scene CG Illustrator）专项技能：针对作者指定的章节读取正文（定稿/草稿）与出场实体设定，先围绕四大高表现力维度（角色魅力特写、细腻情感瞬间、主角贴贴亲密互动、剧情高潮名场面）精选 4~6 个候选 CG 呈报给用户确认（强制人工确认门禁），待用户勾选或微调确认后，结合已有角色立绘保持外观一致，严格套用轻小说/游戏剧情 CG 画风规范绘制高清场景 CG、CG 表情差分、纯场景背景与封面横幅，并归档至项目 04_创作/插画/。"
 version: "0.1.0"
 license: MIT
 compatibility:
@@ -24,6 +24,7 @@ allowed-tools:
   - novel_list_settings
   - novel_inspect_entity
   - novel_search
+  - novel_reader_archive_asset
 metadata:
   author: DDNovelGenerater
   role: scene-cg-illustrator
@@ -47,10 +48,12 @@ metadata:
     - "ddnovel setting show"
     - "ddnovel state inspect"
     - "ddnovel search"
+    - "ddnovel reader archive"
   mcp_tools:
     - novel_list_settings
     - novel_inspect_entity
     - novel_search
+    - novel_reader_archive_asset
   context_isolation: false
 ---
 
@@ -68,12 +71,19 @@ metadata:
 
 > **English Style Block**: `high-detail Japanese anime commercial illustration, flagship light-novel & gacha-game story CG art, luminous soft semi-thick painting digital rendering with silky seamless color gradients and ultra-soft blended edges, bright radiant palette with clean translucent shadows, airy cinematic daylight lighting, soft rim-light bloom and creamy depth-of-field bokeh, refined pure anime facial features, clear glossy jewel-like eyes, lush voluminous wispy flowing hair strands, ultra-fair snow-white milky luminous skin with silky satiny sheen and soft airbrushed seamless skin shading, tall graceful proportions with a compact short upper torso, high waistline, and extra-long legs (legs occupying well over half of total height), plush full curvy thighs with soft rounded volume tapering gracefully into shapely tapered calves and delicate ankles, ornate tailored garments with volumetric folds and crisp environmental highlights, rich emotional atmosphere yet ultra-clean composition.`
 
-### 场景 CG 构图、身份保持与质量禁止细则
-1. **宽屏电影感构图**：默认采用 **16:9 横幅宽屏**（轻小说双页插画 / 商业视觉小说及二次元游戏剧情 CG 构图），明确前景虚化元素、中景人物焦点与远景环境纵深，利用通透光线、逆光光晕与景深引导视线；在全身或中景镜头中注重展现角色修长高挑的身材与偏长的腿部比例（可适度配合微仰拍、坐姿伸展或斜构图凸显腿长线条）。
-2. **角色外观一致性与参考图保持指令**：
+### 场景 CG 构图、身份保持、阅读包专项制作与质量禁止细则
+1. **宽屏电影感构图与高魅力镜头语言**：默认采用 **16:9 横幅宽屏**（轻小说双页插画 / 商业视觉小说及二次元游戏剧情 CG 构图），明确前景虚化元素、中景人物焦点与远景环境纵深，利用通透光线、逆光光晕与景深引导视线；
+   - **展示角色魅力的特写镜头**：大胆运用微仰拍、俯角回眸、坐姿伸展、斜对角构图、近景肩颈与眼眸眼神光特写，放大发丝飘逸感、丝缎柔光肌肤质感、考究服饰褶皱与修长优雅的腿部比例；
+   - **主角贴贴 / 双人亲密互动构图**：重点刻画人物之间的**呼吸感距离、自然肢体接触与眼神交汇**（如靠肩依偎、十指轻扣、耳畔低语、轻拂发丝或擦拭水珠、共撑一伞、怀抱护在身侧、替对方整理衣领等），明确两人身高差、前后景遮挡关系、手指搭放位置与衣袖发丝交叠，确保互动自然唯美、甜度与张力兼具而不僵硬；
+   - **多装扮适配**：依据本章剧情准确还原角色当下的装扮（常服、礼服、居家/睡衣、制服、作战服、雨衣斗篷、战损微乱等），若需换装则在参考图基础上明确声明保持完全相同的脸、瞳色与发型结构，仅更换为本章指定服装。
+2. **角色外观一致性与多参考图保持指令**：
    - 出场人物的发色、瞳色、发型分层、五官气质与服装形制必须严格对齐 `01_设定集/人物/` 与本章动态状态；无参考图时仅用**可见名词与颜色**描述人物外貌（不写抽象性格词或机密身份）。
    - 若 `<book_dir>/04_创作/插画/角色立绘/<实体ID>-<角色名>/`（兼容直接位于 `04_创作/插画/角色立绘/` 根目录的历史文件）下已有出场角色的立绘，**必须优先传入作为参考图**，并在提示词中使用短硬身份保持指令：`使用参考图中的同一角色：保持完全相同的脸、瞳色、发型结构、发色、服装与配饰，不重新设计、不替换成相似的人。只改变：{本章场景姿态、表情、镜头视角与环境}。`
-3. **质量与禁止块**（无独立负面参数时以“避免……”句式写入提示词末尾）：
+   - **双人互动/贴贴 CG 防串脸铁律**：双人同框时同时传入两位角色的参考立绘，并在 Brief 中逐一绑定左右/前后位置与各自发色、瞳色、服饰特征，严禁特征混淆。
+3. **DDNovelReader 阅读包专项扩展（CG 差分 & 纯场景背景）**：
+   - **CG 表情/光影差分（CG Diff）**：当某张 `[主角贴贴]`、`[情感瞬间]` 或 `[角色魅力特写]` CG 在阅读器中跨越连续数句台词时，可基于首张已满意的 CG 作为参考图，只微调人物表情（如「惊愣 → 脸红垂眸 → 柔笑依偎」）、视线方向或光影氛围，产出 2～3 张同构图差分 CG（命名如 `第XXXX章_S01a_初触.png`、`第XXXX章_S01b_脸红.png`），供 DDNovelReader 使用 `stage_patch.cg` + `transition: "crossfade"` 实现 Galgame 级丝滑演进！
+   - **纯场景舞台背景（`assets/bg/`）**：为 DDNovelReader 绘制无人物纯背景时，保持同样清亮柔润半厚涂画风，预留画面中下部立绘站位空间并明确视觉焦点 `focal_point`，可按需同构图衍生晨曦/黄昏/雨夜/烛火等时段变体。
+4. **质量与禁止块**（无独立负面参数时以“避免……”句式写入提示词末尾）：
    - 质量词：`masterpiece, best quality, ultra-detailed, sharp focus, painterly anime refinement, consistent character, correct anatomy, five fingers`；
    - 禁止项：避免扁平赛璐璐上色、避免生硬黑色粗描边；不改变角色锚点任何颜色与结构；不出现设定外多余人物；严禁出现对话框、字幕、游戏 UI 边框、人物姓名条、乱码文字、水印或签名；不画畸形手指、错位四肢、断裂武器；不过曝、不脏色、不发灰、不偏真人写实或 3D 渲染；不擅自添加设定中没有的纹身、伤疤或机械外露部件。
 
@@ -82,11 +92,12 @@ metadata:
 ## 2. 铁律：先选景确认，后动笔绘制（强制人工确认门禁）
 
 - **严禁跳过确认直接批量出图**：拿到指定章号后，第一步永远是分析章节并向用户提交《候选场景 CG 提案清单》，**必须等待用户明确确认要画哪些场景**后，才可调用生图能力开始绘制。
-- **候选场景筛选标准（精选 3～5 个）**：
-  1. **情绪高潮或关系转折点**：具有强烈眼神交流、冲突对峙、重逢、决意或温情瞬间的画面；
-  2. **高辨识度环境与光影**：具备鲜明时空氛围（如雨夜古亭、落日废墟、雪中长街、烛火书房、月下剑影）的视觉名场面；
-  3. **画面叙事自洽**：无需文字旁白也能一眼看懂人物关系、动作张力与情绪基调的镜头；
-  4. **景别与节奏多样化**：在候选方案中兼顾近景情绪特写、中景人物互动与远景大场面，供用户按偏好自由挑选。
+- **候选 CG 四大精选维度（推荐精选 4～6 个，全面兼顾角色魅力、感情张力与剧情高潮）**：
+  1. **`[角色魅力特写]`**：展现核心角色高光颜值、清亮眼眸、飘逸发丝、柔润肌肤光影、考究换装或修长身材曲线的惊艳特写（如窗边逆光回眸、换装亮相、整理发丝/衣襟、坐姿优雅伸展、雨中执伞抬眸）；
+  2. **`[情感瞬间]`**：捕捉角色内心情绪流露、心防松动、脸红羞怯、含泪微笑、温柔慰藉、克制悸动或深情注视的强感染力近景；
+  3. **`[主角贴贴]`**：聚焦主角与核心角色之间的高甜/高羁绊亲密互动名场面（靠肩依偎、牵手轻触、近距离耳语、替对方拂去发丝/水珠、共撑一伞、怀抱护在身侧等），让读者在翻页与画廊收藏时获得极强的情感满足；
+  4. **`[剧情高潮]`**：高辨识度环境与宏大光影氛围（雨夜古亭、落日废墟、雪中长街、破晓重鸣、冲突对峙、关键揭示等）的破框电影感大场面；
+  - 优先保证每个候选镜头**画面叙事自洽**（无需文字也能看懂人物关系与心动/戏剧张力），并在提案中主动标注哪些画面非常适合追加 **2～3 张 CG 表情差分**！
 
 ---
 
@@ -102,12 +113,12 @@ metadata:
    - 调用 `novel_inspect_entity` 或 `novel_search` 读取本章出场主要角色（`01_设定集/人物/`）、核心场景地点（`01_设定集/地理/`）与关键道具（`01_设定集/器物/`）的 `## [核心]` 与相关 `## [专题]`，并核对 `03_状态/当前/人物状态.yaml` 确认本章人物的装束、伤势与随身物品（同样遵循不剧透未解锁 `## [机密]` 的原则）。
    - 扫描 `<book_dir>/04_创作/插画/角色立绘/<实体ID>-<角色名>/`（同时兼容根目录历史文件），记录已存在立绘的出场角色路径，作为后续绘制场景 CG 的视觉参考依据。
 
-### 步骤 2 · 提炼候选场景并交由用户确认（必经门禁）
-向用户清晰呈报 **3～5 个精选候选场景**（建议以结构化列表呈现），每个候选场景必须包含：
-- **场景编号与短标题**：如 `S01 · 雨夜回廊执伞回眸`；
-- **剧情定位与氛围**：对应本章的哪一段情节、核心情绪与戏剧张力；
-- **出场人物与状态**：具体人物、站位关系、动作瞬间、微表情与当前服饰状态；
-- **环境、光影与镜头建议**：景别（特写/中景/全景）、镜头角度（低角度仰拍/过肩镜头/电影平视等）、光源色调、天气/粒子与景深层次。
+### 步骤 2 · 提炼 4～6 个多维度候选 CG 并交由用户确认（必经门禁）
+向用户清晰呈报 **4～6 个精选候选 CG**（建议以结构化列表呈现，覆盖 `[角色魅力特写]` / `[情感瞬间]` / `[主角贴贴]` / `[剧情高潮]`），每个候选场景必须包含：
+- **场景编号、类型标签与短标题**：如 `S01 [主角贴贴] · 雨夜回廊共伞靠肩`、`S02 [角色魅力特写] · 逆光窗边回眸整理发丝`；
+- **剧情定位与情感张力**：对应本章哪一段情节、核心魅力点或感情升温节点（并标注是否推荐追加 2～3 张同构图 CG 表情差分）；
+- **出场人物与状态**：具体人物、站位与肢体接触细节、眼神交汇方向、微表情与当前装扮（常服/礼服/居家/战损等）；
+- **环境、光影与镜头建议**：景别（近景特写/中景互动/宽幅全景）、镜头角度（微仰拍/俯角回眸/过肩镜头/电影平视等）、光源色调、天气/粒子与景深层次。
 
 随后**明确向用户发起确认**（在支持交互式多选的宿主中优先使用 `ask_question` 多选表单，否则以清晰编号列表询问）：
 - 请用户选择希望绘制的一个或多个场景编号；

@@ -4119,11 +4119,15 @@ def reader_archive_cmd(
     ] = None,
     outfit: Annotated[
         str,
-        typer.Option("--outfit", help="立绘服装名称（默认 常服）"),
+        typer.Option("--outfit", help="立绘服装名称（默认 常服，如 礼服 / 居家服 / 制服 / 作战服）"),
     ] = "常服",
+    pose: Annotated[
+        str,
+        typer.Option("--pose", help="可选动作差分姿态标识（如 lean_close / hold_item / turn_back / sit_relax）"),
+    ] = "",
     expression: Annotated[
         str,
-        typer.Option("--expression", help="立绘表情名（如 neutral / alert / smile）"),
+        typer.Option("--expression", help="立绘表情名（如 neutral / smile / blush / tease / alert / tender）"),
     ] = "neutral",
     label: Annotated[
         str,
@@ -4185,6 +4189,7 @@ def reader_archive_cmd(
         chapter=chapter,
         volume_id=volume_id,
         outfit=outfit,
+        pose=pose,
         expression=expression,
         label=label,
         reader_asset_path=reader_asset_path,

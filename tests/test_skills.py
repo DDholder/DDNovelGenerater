@@ -490,6 +490,10 @@ def test_scene_cg_illustrator_skill_domain_requirements():
         "soft airbrushed seamless skin shading",
         "使用参考图中的同一角色",
         "image-generator",
+        "角色魅力特写",
+        "情感瞬间",
+        "主角贴贴",
+        "CG 表情/光影差分",
     ):
         assert required_token in body, f"dd-scene-cg-illustrator 缺少关键规范内容: {required_token}"
 
@@ -533,6 +537,12 @@ def test_reader_packager_skill_domain_requirements():
         "ddnovel reader pack",
         "ddnovel reader archive",
         "资产清单.yaml",
+        "不同装扮",
+        "动作/姿态差分",
+        "主角贴贴",
+        "角色魅力特写",
+        "CG 表情/光影差分",
+        "旗舰精装档",
         "unlock_gallery_id",
         "ZIP Store",
     ):

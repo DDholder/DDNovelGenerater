@@ -141,11 +141,32 @@ _CODEX_TYPE_DEFAULT_COLOR: Final[dict[str, str]] = {
 }
 
 _EXPRESSION_RULES: Final[tuple[tuple[str, str, re.Pattern[str]], ...]] = (
+    ("blush", "脸红娇羞", re.compile(r"脸红|泛红|羞涩|羞怯|耳根发红|红着脸|娇羞|微红|不好意思|羞恼|心跳加速")),
+    ("tease", "狡黠调皮", re.compile(r"狡黠|俏皮|调侃|戏谑|挑眉|眨眼|坏笑|得意|偷笑")),
+    ("surprise", "惊愕惊讶", re.compile(r"惊讶|惊愕|怔住|瞪大|一愣|吃惊|愕然|不可置信|愣住")),
+    ("tender", "温柔含情", re.compile(r"温柔|轻柔|柔声|深情|宠溺|怜惜|眷恋|柔情|含情")),
     ("alert", "警觉", re.compile(r"警觉|警惕|戒备|瞳孔|不好|小心|(?<![别不])紧张|拔剑|突袭|危机|喝止")),
     ("smile", "微笑", re.compile(r"微笑|轻笑|笑道|笑意|勾唇|嘴角|温和|欣慰|开心")),
     ("angry", "愤怒", re.compile(r"怒道|冷哼|厉声|咬牙|怒喝|寒声|怒意|斥道|怒目|冷笑")),
-    ("sad", "低落", re.compile(r"叹息|垂眸|哽咽|苦笑|黯然|悲伤|泪|低沉|惋惜|失落")),
+    ("sad", "低落", re.compile(r"叹息|垂眸|哽咽|苦笑|黯然|悲伤|泪|低沉|惋惜|失落|委屈")),
     ("determined", "坚定", re.compile(r"沉声|坚定|决意|肃然|凝声|斩钉截铁|目光如炬|正色")),
+)
+
+_POSE_RULES: Final[tuple[tuple[str, str, re.Pattern[str]], ...]] = (
+    ("lean_close", "倾身靠近", re.compile(r"俯身|凑近|贴近|倾身|靠过来|拉近距离|探身")),
+    ("hold_item", "持物执伞", re.compile(r"执伞|撑伞|手持|握着|递出|捧着|举起|提灯")),
+    ("turn_back", "回眸转身", re.compile(r"回眸|回头|转身|侧首|望向身后|回首")),
+    ("combat_stance", "备战持刃", re.compile(r"拔剑|举枪|架势|摆开|蓄势|亮出武器|戒备姿态")),
+    ("sit_relax", "坐姿休憩", re.compile(r"坐下|靠在|倚着|坐在|蜷坐|托腮")),
+)
+
+_OUTFIT_RULES: Final[tuple[tuple[str, str, re.Pattern[str]], ...]] = (
+    ("formal", "礼服", re.compile(r"礼服|晚礼服|舞裙|华服|盛装|正装")),
+    ("homewear", "居家服", re.compile(r"睡衣|居家服|浴袍|家居服|宽松衬衫|寝衣")),
+    ("uniform", "制服", re.compile(r"制服|校服|院服|学园装|官服|军装")),
+    ("combat", "作战服", re.compile(r"作战服|战斗服|战甲|劲装|武装|战术服")),
+    ("cloak", "斗篷装", re.compile(r"斗篷|雨衣|风衣|披风|大衣")),
+    ("damaged", "战损装", re.compile(r"战损|衣衫破损|衣襟凌乱|沾血|破碎衣袖")),
 )
 
 _WEATHER_RULES: Final[tuple[tuple[str, float, str, re.Pattern[str]], ...]] = (
@@ -156,6 +177,15 @@ _WEATHER_RULES: Final[tuple[tuple[str, float, str, re.Pattern[str]], ...]] = (
     ("memory_sepia", 0.5, "回忆滤镜", re.compile(r"回忆|多年前|旧事|往昔|梦境之中")),
 )
 
+_INTIMACY_CUE_RE: Final[re.Pattern[str]] = re.compile(
+    r"贴贴|依偎|靠在肩|牵手|十指|拥抱|抱住|耳语|靠近|贴近|拂去|擦拭|共伞|并肩|吻|轻抚|怀里|靠过来|拉住手|指尖相触|环住"
+)
+_CHARM_CUE_RE: Final[re.Pattern[str]] = re.compile(
+    r"回眸|逆光|发丝|眼眸|裙摆|修长|长腿|丝袜|锁骨|笑靥|微风|窗边|月光下|灯光下|换上|亮相|侧颜|红唇|风姿|惊艳"
+)
+_EMOTION_CUE_RE: Final[re.Pattern[str]] = re.compile(
+    r"脸红|心跳|含泪|微笑|哽咽|柔声|凝视|注视|心软|愧疚|安心|告白|誓言|温柔|羞怯|眼眶|低语|倾诉"
+)
 _CLIMAX_CUE_RE: Final[re.Pattern[str]] = re.compile(
     r"决战|觉醒|真相|揭示|崩塌|破晓|爆发|对峙|重逢|告别|高潮|名场面|剑光|轰鸣|震颤|共鸣|撕裂"
 )
@@ -168,10 +198,14 @@ _CARD_HINT_RULES: Final[tuple[tuple[str, str, re.Pattern[str]], ...]] = (
 )
 
 _FILENAME_EXPR_HINTS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    ("blush", re.compile(r"blush|shy|脸红|害羞|娇羞", re.IGNORECASE)),
+    ("tease", re.compile(r"tease|smirk|俏皮|狡黠|调皮", re.IGNORECASE)),
+    ("surprise", re.compile(r"surprise|shock|惊讶|惊愕", re.IGNORECASE)),
+    ("tender", re.compile(r"tender|gentle|温柔|含情", re.IGNORECASE)),
     ("alert", re.compile(r"alert|警觉|戒备|战斗|战损", re.IGNORECASE)),
     ("smile", re.compile(r"smile|happy|微笑|笑|喜", re.IGNORECASE)),
     ("angry", re.compile(r"angry|glare|愤怒|怒|冷冽", re.IGNORECASE)),
-    ("sad", re.compile(r"sad|cry|悲伤|低落|泪", re.IGNORECASE)),
+    ("sad", re.compile(r"sad|cry|悲伤|低落|泪|委屈", re.IGNORECASE)),
     ("determined", re.compile(r"determined|serious|坚定|认真|肃然", re.IGNORECASE)),
     ("neutral", re.compile(r"neutral|calm|立绘|常服|平静|默认", re.IGNORECASE)),
 )
@@ -252,6 +286,8 @@ class ReaderResourceRequirement:
     entity_id: str | None = None
     expression: str | None = None
     outfit: str | None = None
+    pose: str | None = None
+    cg_kind: str | None = None
     unlock_gallery_id: str | None = None
     existing_source_path: str | None = None
     archive_target_path: str | None = None
@@ -274,6 +310,7 @@ class ArchivedAssetResult:
     entity_id: str | None = None
     chapter: int | None = None
     outfit: str | None = None
+    pose: str | None = None
     expression: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -1230,6 +1267,7 @@ class ReaderExporter:
         chapter: int | None = None,
         volume_id: str | None = None,
         outfit: str = "常服",
+        pose: str = "",
         expression: str = "neutral",
         label: str = "",
         ext: str = ".png",
@@ -1247,8 +1285,13 @@ class ReaderExporter:
             name_lbl = sanitize_filename_label(doc.name if doc else label)
             folder_name = f"{entity_id}-{name_lbl}" if name_lbl else entity_id
             outfit_lbl = sanitize_filename_label(outfit) or "常服"
+            pose_lbl = sanitize_filename_label(pose) if pose and pose.strip().lower() not in {"stand", "default"} else ""
             expr_lbl = sanitize_filename_label(expression) or "neutral"
-            stem = f"{folder_name}_{outfit_lbl}_{expr_lbl}"
+            stem_parts = [folder_name, outfit_lbl]
+            if pose_lbl:
+                stem_parts.append(pose_lbl)
+            stem_parts.append(expr_lbl)
+            stem = "_".join(stem_parts)
             return resolve_character_portraits_dir(self._book_dir, for_write=True) / folder_name / f"{stem}{suffix}"
 
         if cat == "portrait":
@@ -1301,6 +1344,8 @@ class ReaderExporter:
         *,
         entity_id: str | None = None,
         chapter: int | None = None,
+        outfit: str = "常服",
+        pose: str = "",
         expression: str = "neutral",
         label: str = "",
         ext: str = ".png",
@@ -1312,8 +1357,26 @@ class ReaderExporter:
         if cat == "banner":
             return f"assets/banner{suffix}"
         if cat == "sprite" and entity_id:
+            outfit_clean = (outfit or "").strip()
+            outfit_slug = "default"
+            if outfit_clean and outfit_clean.lower() not in {"default", "常服", "经典常服"}:
+                matched_outfit = next(
+                    (oid for oid, olbl, _ in _OUTFIT_RULES if outfit_clean == olbl or outfit_clean.lower() == oid),
+                    None,
+                )
+                outfit_slug = matched_outfit or _safe_ascii_id(outfit_clean, prefix="outfit")
+            pose_clean = (pose or "").strip()
+            pose_slug = ""
+            if pose_clean and pose_clean.lower() not in {"stand", "default"}:
+                matched_pose = next(
+                    (pid for pid, plbl, _ in _POSE_RULES if pose_clean == plbl or pose_clean.lower() == pid),
+                    None,
+                )
+                pose_slug = matched_pose or _safe_ascii_id(pose_clean, prefix="pose")
             expr_slug = _safe_ascii_id(expression or "neutral", prefix="expr")
-            return f"assets/sprites/{entity_id}_default_{expr_slug}{suffix}"
+            if pose_slug:
+                return f"assets/sprites/{entity_id}_{outfit_slug}_{pose_slug}_{expr_slug}{suffix}"
+            return f"assets/sprites/{entity_id}_{outfit_slug}_{expr_slug}{suffix}"
         if cat == "portrait" and entity_id:
             return f"assets/portraits/{entity_id}_badge{suffix}"
         if cat == "background":
@@ -1338,6 +1401,7 @@ class ReaderExporter:
         chapter: int | None = None,
         volume_id: str | None = None,
         outfit: str = "常服",
+        pose: str = "",
         expression: str = "neutral",
         label: str = "",
         reader_asset_path: str | None = None,
@@ -1359,6 +1423,7 @@ class ReaderExporter:
             chapter=chapter,
             volume_id=volume_id,
             outfit=outfit,
+            pose=pose,
             expression=expression,
             label=label or src.stem,
             ext=ext,
@@ -1374,6 +1439,8 @@ class ReaderExporter:
                 category,
                 entity_id=entity_id,
                 chapter=chapter,
+                outfit=outfit,
+                pose=pose,
                 expression=expression,
                 label=label or src.stem,
                 ext=ext,
@@ -1399,6 +1466,8 @@ class ReaderExporter:
             new_entry["volume_id"] = volume_id
         if category.strip().lower() == "sprite":
             new_entry["outfit"] = outfit
+            if pose.strip():
+                new_entry["pose"] = pose.strip()
             new_entry["expression"] = expression
         if label.strip():
             new_entry["label"] = label.strip()
@@ -1443,6 +1512,7 @@ class ReaderExporter:
             entity_id=entity_id,
             chapter=chapter,
             outfit=outfit if category.strip().lower() == "sprite" else None,
+            pose=(pose.strip() or None) if category.strip().lower() == "sprite" else None,
             expression=expression if category.strip().lower() == "sprite" else None,
         )
 
@@ -2497,16 +2567,48 @@ class ReaderExporter:
                 )
             )
 
-        # 3. 角色立绘、差分与说话人微徽章
+        # 3. 角色立绘、表情差分、动作差分、不同装扮与说话人微徽章
         expr_labels = {k: lbl for k, lbl, _ in _EXPRESSION_RULES}
         expr_labels["neutral"] = "常态"
+        pose_labels = {k: lbl for k, lbl, _ in _POSE_RULES}
+        outfit_labels = {k: lbl for k, lbl, _ in _OUTFIT_RULES}
+
+        # 按角色采集本章提及的动作与换装段落文本
+        char_context_text: dict[str, str] = {}
+        for cp in cast_profiles:
+            doc = settings[cp.entity_id]
+            terms = [t.strip() for t in doc.all_names() if len(t.strip()) >= 2]
+            matched_blocks = [
+                blk["text"]
+                for blk in chapter_doc["blocks"]
+                if any(t in blk["text"] for t in terms)
+                or (isinstance(blk.get("speaker"), dict) and blk["speaker"].get("id") == cp.entity_id)
+            ]
+            char_context_text[cp.entity_id] = "\n".join(matched_blocks)
+
         for cp in cast_profiles:
             if cp.role == "mentioned" and not cp.detected_expressions:
                 continue
             char_map = illus["char_sprites"].get(cp.entity_id, {})
             has_any_base = bool(cp.existing_portraits)
             base_path_str = cp.existing_portraits[0] if cp.existing_portraits else None
-            for expr in cp.detected_expressions or ["neutral"]:
+            c_text = char_context_text.get(cp.entity_id, "")
+
+            # 3.1 常规装扮 + 丰富表情差分（整合对白与叙述中的神态描写；主角/核心出场角色至少规划 3 个表情差分）
+            expr_list = list(cp.detected_expressions or ["neutral"])
+            if "neutral" not in expr_list:
+                expr_list.insert(0, "neutral")
+            for eid_rule, _elbl_rule, epat_rule in _EXPRESSION_RULES:
+                if eid_rule not in expr_list and epat_rule.search(c_text):
+                    expr_list.append(eid_rule)
+            if cp.role in ("pov", "featured") and len(expr_list) < 3:
+                for extra_expr in ("smile", "blush", "tender", "determined"):
+                    if extra_expr not in expr_list:
+                        expr_list.append(extra_expr)
+                    if len(expr_list) >= 3:
+                        break
+
+            for expr in expr_list:
                 sp_asset = f"assets/sprites/{cp.entity_id}_default_{expr}.png"
                 ugid = f"gal_{cp.entity_id}_default_{expr}"
                 exact_file = illus.get("catalog_map", {}).get(sp_asset) or char_map.get(expr)
@@ -2533,11 +2635,11 @@ class ReaderExporter:
                     ReaderResourceRequirement(
                         asset_path=sp_asset,
                         category="sprite",
-                        title=f"角色立绘 · {cp.name}（{expr_labels.get(expr, expr)}差分）",
+                        title=f"角色立绘 · {cp.name}（常服·{expr_labels.get(expr, expr)}表情差分）",
                         status=status,
                         recommended_size="1024x1600 或 1200x2000 透明底 PNG（脚底贴底 0.5,1.0，同角色统一尺寸）",
                         reason=(
-                            f"本章{cp.role}角色（对白 {cp.dialogue_count} 句），需呈现「{expr_labels.get(expr, expr)}」神态"
+                            f"本章{cp.role}角色（对白 {cp.dialogue_count} 句），用于对白软切展现「{expr_labels.get(expr, expr)}」微表情"
                         ),
                         entity_id=cp.entity_id,
                         expression=expr,
@@ -2545,6 +2647,103 @@ class ReaderExporter:
                         unlock_gallery_id=ugid,
                         existing_source_path=ex_path,
                         archive_target_path=sp_archive_rel,
+                        recommended_skill="dd-character-illustrator",
+                    )
+                )
+
+            # 3.2 动作差分立绘（根据本章人物互动/动作描写自动提议，增强 2.5D 舞台灵动感）
+            detected_poses = [
+                pid for pid, _plbl, pat in _POSE_RULES if pat.search(c_text)
+            ]
+            for pose_id in detected_poses[:2]:
+                pose_lbl = pose_labels.get(pose_id, pose_id)
+                pose_expr = expr_list[1] if len(expr_list) > 1 else "neutral"
+                pose_asset = f"assets/sprites/{cp.entity_id}_default_{pose_id}_{pose_expr}.png"
+                pose_ugid = f"gal_{cp.entity_id}_default_{pose_id}_{pose_expr}"
+                matched_pose = illus.get("catalog_map", {}).get(pose_asset)
+                pose_archive_rel = self.compute_archive_path(
+                    "sprite",
+                    entity_id=cp.entity_id,
+                    outfit="常服",
+                    pose=pose_id,
+                    expression=pose_expr,
+                    settings=settings,
+                ).relative_to(self._book_dir).as_posix()
+                if _real_in_source(pose_asset) or matched_pose is not None:
+                    p_status: Literal["ready", "reuse_base", "missing"] = "ready"
+                    p_ex = (
+                        matched_pose.relative_to(self._book_dir).as_posix()
+                        if matched_pose is not None
+                        else f"source/{pose_asset}"
+                    )
+                elif has_any_base:
+                    p_status = "reuse_base"
+                    p_ex = base_path_str
+                else:
+                    p_status = "missing"
+                    p_ex = None
+                resources.append(
+                    ReaderResourceRequirement(
+                        asset_path=pose_asset,
+                        category="sprite",
+                        title=f"动作差分立绘 · {cp.name}（{pose_lbl}·{expr_labels.get(pose_expr, pose_expr)}）",
+                        status=p_status,
+                        recommended_size="1024x1600 或 1200x2000 透明底 PNG（传基础立绘参考锁脸与服装，仅换动态姿态）",
+                        reason=f"正文检出「{pose_lbl}」动作描写，增加动作差分可大幅提升阅读器舞台生动度",
+                        entity_id=cp.entity_id,
+                        expression=pose_expr,
+                        outfit="default",
+                        pose=pose_id,
+                        unlock_gallery_id=pose_ugid,
+                        existing_source_path=p_ex,
+                        archive_target_path=pose_archive_rel,
+                        recommended_skill="dd-character-illustrator",
+                    )
+                )
+
+            # 3.3 不同装扮差分（若正文检出换装/礼服/居家服/制服/作战服/斗篷/战损）
+            detected_outfits = [
+                oid for oid, _olbl, pat in _OUTFIT_RULES if pat.search(c_text)
+            ]
+            for outfit_id in detected_outfits[:2]:
+                outfit_lbl = outfit_labels.get(outfit_id, outfit_id)
+                outfit_asset = f"assets/sprites/{cp.entity_id}_{outfit_id}_neutral.png"
+                outfit_ugid = f"gal_{cp.entity_id}_{outfit_id}_neutral"
+                matched_outfit = illus.get("catalog_map", {}).get(outfit_asset)
+                outfit_archive_rel = self.compute_archive_path(
+                    "sprite",
+                    entity_id=cp.entity_id,
+                    outfit=outfit_lbl,
+                    expression="neutral",
+                    settings=settings,
+                ).relative_to(self._book_dir).as_posix()
+                if _real_in_source(outfit_asset) or matched_outfit is not None:
+                    o_status: Literal["ready", "reuse_base", "missing"] = "ready"
+                    o_ex = (
+                        matched_outfit.relative_to(self._book_dir).as_posix()
+                        if matched_outfit is not None
+                        else f"source/{outfit_asset}"
+                    )
+                elif has_any_base:
+                    o_status = "reuse_base"
+                    o_ex = base_path_str
+                else:
+                    o_status = "missing"
+                    o_ex = None
+                resources.append(
+                    ReaderResourceRequirement(
+                        asset_path=outfit_asset,
+                        category="sprite",
+                        title=f"换装立绘 · {cp.name}（{outfit_lbl}装扮）",
+                        status=o_status,
+                        recommended_size="1024x1600 或 1200x2000 透明底 PNG（保持脸/发型/身材一致，收录画廊换装组）",
+                        reason=f"正文检出「{outfit_lbl}」装扮场景，可在阅读器鉴赏室与百科解锁新换装条目",
+                        entity_id=cp.entity_id,
+                        expression="neutral",
+                        outfit=outfit_id,
+                        unlock_gallery_id=outfit_ugid,
+                        existing_source_path=o_ex,
+                        archive_target_path=outfit_archive_rel,
                         recommended_skill="dd-character-illustrator",
                     )
                 )
@@ -2576,12 +2775,16 @@ class ReaderExporter:
                 )
             )
 
-        # 4. 典藏剧情 CG / 破框演出插图建议
+        # 4. 典藏剧情 CG / 魅力特写 / 情感瞬间 / 主角贴贴提案（多维度高赏心悦目 CG 矩阵）
         cg_moments: list[dict[str, Any]] = []
+        used_cg_assets: set[str] = set()
+        next_cg_num = 1
         if meta["cg_assets_used"]:
             for cg_item in meta["cg_assets_used"]:
                 src_p = cg_item["source_file"]
                 src_rel = src_p.relative_to(self._book_dir).as_posix()
+                used_cg_assets.add(cg_item["asset"])
+                next_cg_num += 1
                 resources.append(
                     ReaderResourceRequirement(
                         asset_path=cg_item["asset"],
@@ -2590,60 +2793,127 @@ class ReaderExporter:
                         status="ready",
                         recommended_size="1920x1080 (16:9 横幅宽屏，破框全屏演出)",
                         reason="已在 04_创作/插画/场景CG/ 检出本章对应剧情 CG，可直接用于破框高潮页",
+                        cg_kind="climax",
                         unlock_gallery_id=cg_item["id"],
                         existing_source_path=src_rel,
                         archive_target_path=src_rel,
                         recommended_skill="dd-scene-cg-illustrator",
                     )
                 )
-                cg_moments.append({"title": cg_item["title"], "asset": cg_item["asset"], "status": "ready"})
-        else:
-            # 从蓝图节拍与高张力段落提炼 1~2 个推荐剧情 CG 提案
-            candidate_snippets: list[tuple[str, str]] = []
-            if ch_src.blueprint is not None and ch_src.blueprint.beats:
-                for beat in ch_src.blueprint.beats[-2:]:
-                    label = beat.title.strip() or f"节拍 {beat.index}"
-                    candidate_snippets.append((label, beat.content.strip()[:80] or label))
-            if not candidate_snippets:
-                for blk in chapter_doc["blocks"]:
-                    if blk["type"] == "narration" and _CLIMAX_CUE_RE.search(blk["text"]):
-                        candidate_snippets.append((f"{ch_src.title} 高潮瞬间", blk["text"][:80]))
-                        if len(candidate_snippets) >= 2:
-                            break
-            if not candidate_snippets:
-                candidate_snippets.append((f"{ch_src.title} 核心名场面", chapter_doc["blocks"][-1]["text"][:80]))
+                cg_moments.append({"title": cg_item["title"], "asset": cg_item["asset"], "cg_kind": "climax", "status": "ready"})
 
-            for idx, (label, snippet) in enumerate(candidate_snippets[:2], start=1):
-                cg_id = f"cg_{ch_src.chapter_id}_{idx:02d}"
-                cg_asset = f"assets/cgs/{cg_id}.png"
-                matched_cg = illus.get("catalog_map", {}).get(cg_asset)
-                cg_ready = _real_in_source(cg_asset) or matched_cg is not None
-                cg_archive_rel = self.compute_archive_path(
-                    "cg",
-                    chapter=chapter,
-                    volume_id=ch_src.volume_id,
-                    label=f"S{idx:02d}_{label}",
-                    settings=settings,
-                ).relative_to(self._book_dir).as_posix()
-                resources.append(
-                    ReaderResourceRequirement(
-                        asset_path=cg_asset,
-                        category="cg",
-                        title=f"推荐剧情 CG #{idx} · {label}",
-                        status="ready" if cg_ready else "missing",
-                        recommended_size="1920x1080 (16:9 横幅宽屏，破框全屏演出)",
-                        reason=f"推荐作为 break_frame=true + standalone_page 高潮插图（线索：{snippet}）",
-                        unlock_gallery_id=cg_id,
-                        existing_source_path=(
-                            matched_cg.relative_to(self._book_dir).as_posix()
-                            if matched_cg is not None
-                            else (f"source/{cg_asset}" if _real_in_source(cg_asset) else None)
-                        ),
-                        archive_target_path=cg_archive_rel,
-                        recommended_skill="dd-scene-cg-illustrator",
-                    )
+        # 围绕四大高魅力维度挖掘本章可追加的精选 CG 提案（主角贴贴 / 角色魅力特写 / 情感瞬间 / 剧情高潮）
+        cg_proposals: list[tuple[str, str, str, str]] = []  # (cg_kind, kind_tag, label, snippet)
+        seen_cg_kinds: set[str] = set()
+        text_blocks = [blk["text"] for blk in chapter_doc["blocks"] if blk["type"] != "scene_divider"]
+
+        # 4.1 [主角贴贴] 亲密互动/双人羁绊
+        intimacy_hit = next((t for t in text_blocks if _INTIMACY_CUE_RE.search(t)), None)
+        if intimacy_hit:
+            cg_proposals.append(("intimacy", "主角贴贴", "双人亲密贴贴互动", intimacy_hit[:80]))
+            seen_cg_kinds.add("intimacy")
+        elif len(cast_profiles) >= 2:
+            lead_names = f"{cast_profiles[0].name}与{cast_profiles[1].name}"
+            cg_proposals.append(
+                (
+                    "intimacy",
+                    "主角贴贴",
+                    f"{lead_names}近距离互动贴贴",
+                    f"捕捉{lead_names}在本章中的近身交流、并肩靠拢或微妙肢体互动瞬间（可配 2 张表情差分）",
                 )
-                cg_moments.append({"title": label, "asset": cg_asset, "snippet": snippet, "status": "ready" if cg_ready else "missing"})
+            )
+            seen_cg_kinds.add("intimacy")
+
+        # 4.2 [角色魅力特写] 高光颜值/身材/逆光/换装特写
+        charm_hit = next((t for t in text_blocks if _CHARM_CUE_RE.search(t)), None)
+        lead_char_name = cast_profiles[0].name if cast_profiles else "核心角色"
+        if charm_hit:
+            cg_proposals.append(("charm_closeup", "角色魅力特写", f"{lead_char_name}魅力高光特写", charm_hit[:80]))
+            seen_cg_kinds.add("charm_closeup")
+        elif cast_profiles:
+            cg_proposals.append(
+                (
+                    "charm_closeup",
+                    "角色魅力特写",
+                    f"{lead_char_name}光影魅力特写",
+                    f"以清亮逆光与电影景深展现{lead_char_name}的精致五官、发丝与修长身材曲线",
+                )
+            )
+            seen_cg_kinds.add("charm_closeup")
+
+        # 4.3 [情感瞬间] 眼神交汇/心动/柔情/情绪波动
+        emotion_hit = next((t for t in text_blocks if _EMOTION_CUE_RE.search(t)), None)
+        if emotion_hit:
+            cg_proposals.append(("emotion", "情感瞬间", "角色细腻情感特写", emotion_hit[:80]))
+            seen_cg_kinds.add("emotion")
+
+        # 4.4 [剧情高潮] 蓝图高潮节拍或剧烈剧情转折（若尚无已有高潮 CG 则补充）
+        if not meta["cg_assets_used"]:
+            climax_label: str | None = None
+            climax_snippet: str | None = None
+            if ch_src.blueprint is not None and ch_src.blueprint.beats:
+                last_beat = ch_src.blueprint.beats[-1]
+                climax_label = last_beat.title.strip() or f"节拍 {last_beat.index}"
+                climax_snippet = last_beat.content.strip()[:80] or climax_label
+            if climax_label is None:
+                climax_hit = next((t for t in reversed(text_blocks) if _CLIMAX_CUE_RE.search(t)), None)
+                if climax_hit:
+                    climax_label = f"{ch_src.title} 高潮名场面"
+                    climax_snippet = climax_hit[:80]
+            if climax_label is None and text_blocks:
+                climax_label = f"{ch_src.title} 核心场景"
+                climax_snippet = text_blocks[-1][:80]
+            if climax_label and climax_snippet:
+                cg_proposals.append(("climax", "剧情高潮", climax_label, climax_snippet))
+                seen_cg_kinds.add("climax")
+
+        for cg_kind, kind_tag, label, snippet in cg_proposals[:4]:
+            cg_id = f"cg_{ch_src.chapter_id}_{next_cg_num:02d}"
+            cg_asset = f"assets/cgs/{cg_id}.png"
+            while cg_asset in used_cg_assets:
+                next_cg_num += 1
+                cg_id = f"cg_{ch_src.chapter_id}_{next_cg_num:02d}"
+                cg_asset = f"assets/cgs/{cg_id}.png"
+            used_cg_assets.add(cg_asset)
+            next_cg_num += 1
+
+            matched_cg = illus.get("catalog_map", {}).get(cg_asset)
+            cg_ready = _real_in_source(cg_asset) or matched_cg is not None
+            cg_archive_rel = self.compute_archive_path(
+                "cg",
+                chapter=chapter,
+                volume_id=ch_src.volume_id,
+                label=f"S{next_cg_num - 1:02d}_{kind_tag}_{label}",
+                settings=settings,
+            ).relative_to(self._book_dir).as_posix()
+            resources.append(
+                ReaderResourceRequirement(
+                    asset_path=cg_asset,
+                    category="cg",
+                    title=f"推荐 CG [{kind_tag}] · {label}",
+                    status="ready" if cg_ready else "missing",
+                    recommended_size="1920x1080 (16:9 横幅宽屏，破框全屏演出；可选 2~3 张表情差分)",
+                    reason=f"[{kind_tag}] 推荐作为 break_frame=true + standalone_page 收藏级插图（线索：{snippet}）",
+                    cg_kind=cg_kind,
+                    unlock_gallery_id=cg_id,
+                    existing_source_path=(
+                        matched_cg.relative_to(self._book_dir).as_posix()
+                        if matched_cg is not None
+                        else (f"source/{cg_asset}" if _real_in_source(cg_asset) else None)
+                    ),
+                    archive_target_path=cg_archive_rel,
+                    recommended_skill="dd-scene-cg-illustrator",
+                )
+            )
+            cg_moments.append(
+                {
+                    "title": f"[{kind_tag}] {label}",
+                    "asset": cg_asset,
+                    "cg_kind": cg_kind,
+                    "snippet": snippet,
+                    "status": "ready" if cg_ready else "missing",
+                }
+            )
 
         # 5. 识别潜在叙事道具卡线索
         card_candidates: list[dict[str, str]] = []
